@@ -10,16 +10,18 @@ class VscImageEditor extends StatefulWidget {
   const VscImageEditor({
     Key? key,
     required this.imageBytes,
+    this.controller,
   }) : super(key: key);
 
   final Uint8List imageBytes;
+  final VscImageEditorController? controller;
 
   @override
-  State<VscImageEditor> createState() => _VscImageEditorState();
+  State<VscImageEditor> createState() => VscImageEditorState();
 }
 
-class _VscImageEditorState extends State<VscImageEditor> {
-  _VscImageEditorState();
+class VscImageEditorState extends State<VscImageEditor> {
+  VscImageEditorState();
 
   late final EditorModel _model;
 
@@ -27,6 +29,7 @@ class _VscImageEditorState extends State<VscImageEditor> {
   void initState() {
     super.initState();
     _model = EditorModel(widget.imageBytes);
+    widget.controller?.model = _model;
   }
 
   @override
@@ -47,6 +50,15 @@ class _VscImageEditorState extends State<VscImageEditor> {
    */
   @override
   Widget build(BuildContext context) {
+    final toolItems = Tool.values
+        .map(
+          (tool) => PopupMenuItem(
+            child: Icon(tool.icon),
+            onTap: () => _model.selectTool(tool),
+          ),
+        )
+        .toList(growable: false);
+
     return Observer(builder: (context) {
       if (!_model.initialized) {
         return const Center(child: CircularProgressIndicator());
@@ -55,209 +67,102 @@ class _VscImageEditorState extends State<VscImageEditor> {
       final theme = Theme.of(context);
       return BottomNavigationBarTheme(
         data: theme.bottomNavigationBarTheme,
-        child: SizedBox.expand(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: LayoutBuilder(builder: (context, constraints) {
-                  _model.setViewportSize(
-                      constraints.maxWidth, constraints.maxHeight);
-                  return Observer(builder: (context) {
-                    return Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Zoom(
-                            initTotalZoomOut: true,
-                            enableScroll: false,
-                            onScaleUpdate: (scaleChange, newScale) {},
-                            child: SizedBox(
-                              width: _model.physicalWidth,
-                              height: _model.physicalHeight,
-                              child: CustomPaint(
-                                painter: _ImagePainter(_model),
-                              ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Expanded(
+              child: LayoutBuilder(builder: (context, constraints) {
+                _model.setViewportSize(
+                    constraints.maxWidth, constraints.maxHeight);
+                return Observer(builder: (context) {
+                  return Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Zoom(
+                          initTotalZoomOut: true,
+                          enableScroll: false,
+                          transformationController:
+                              _model.transformationController,
+                          child: SizedBox(
+                            width: _model.physicalCropRect.width,
+                            height: _model.physicalCropRect.height,
+                            child: CustomPaint(
+                              painter: _model.imagePainter,
                             ),
                           ),
                         ),
-                        Positioned.fill(
-                          // TODO controls from model go here.
-                          child: _CropControl(model: _model),
-                        ),
+                      ),
+                      Positioned.fill(
+                        child: Stack(children: _model.viewportOverlays),
+                      ),
+                    ],
+                  );
+                });
+              }),
+            ),
+            Container(
+              color: theme.colorScheme.surface,
+              height: 64,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  PopupMenuButton(
+                    itemBuilder: (context) => toolItems,
+                    tooltip: 'Tools',
+                    offset: const Offset(48, 0),
+                    child: Row(
+                      children: [
+                        Icon(_model.selectedTool.icon),
+                        const Icon(Icons.arrow_drop_up),
                       ],
-                    );
-                  });
-                }),
-              ),
-              BottomNavigationBar(
-                type: BottomNavigationBarType.fixed,
-                currentIndex: 8,
-                onTap: (index) {},
-                items: const [
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.pan_tool_alt),
-                    label: 'Select',
+                    ),
                   ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.crop),
-                    label: 'Crop',
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.rotate_90_degrees_ccw_outlined),
+                    tooltip: 'Rotate left',
                   ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.rotate_90_degrees_ccw_outlined),
-                    label: 'Rotate left',
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.rotate_90_degrees_cw_outlined),
+                    tooltip: 'Rotate right',
                   ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.rotate_90_degrees_cw_outlined),
-                    label: 'Rotate right',
+                  IconButton(
+                    onPressed: () => _model.clearCrop(),
+                    icon: const Icon(Icons.crop_original_outlined),
+                    tooltip: 'Clear crop',
                   ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.gesture),
-                    label: 'Draw',
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.color_lens, color: Colors.red),
+                    tooltip: 'Color',
                   ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.text_fields),
-                    label: 'Text',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.circle_outlined),
-                    label: 'Draw circle/ellipse',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.rectangle_outlined),
-                    label: 'Draw rectangle',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.color_lens, color: Colors.red),
-                    label: 'Color',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Text('100%'),
-                    label: 'Zoom',
+                  Tooltip(
+                    message: 'Zoom',
+                    child: TextButton(
+                      onPressed: () {},
+                      child: Row(
+                        children: [
+                          Text(
+                              '${(_model.zoomScale * 100).toStringAsFixed(1)}%'),
+                          const Icon(Icons.arrow_drop_up),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     });
   }
 }
 
-class _CropControl extends StatelessWidget {
-  const _CropControl({Key? key, required this.model}) : super(key: key);
+class VscImageEditorController {
+  EditorModel? model;
 
-  final EditorModel model;
-
-  @override
-  Widget build(BuildContext context) {
-    // TODO move this to when control is activated.
-    if (model.cropRect == Rect.zero) model.startCrop();
-
-    return Observer(
-      builder: (context) {
-        final cropRect = model.cropRect;
-        const controlWH = 15.0;
-        const halfControlWH = controlWH / 2;
-        final controlSquare =
-            Container(color: Colors.white, width: controlWH, height: controlWH);
-        return Stack(
-          children: [
-            // scrim
-            Positioned(
-              left: 0,
-              top: 0,
-              right: 0,
-              bottom: 0,
-              child: CustomPaint(painter: _CropScrimPainter(cropRect)),
-            ),
-            // upper left
-            Positioned(
-              left: cropRect.left - halfControlWH,
-              top: cropRect.top - halfControlWH,
-              child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropLeftTop(details),
-                child: controlSquare,
-              ),
-            ),
-            // upper right
-            Positioned(
-              left: cropRect.right - halfControlWH,
-              top: cropRect.top - halfControlWH,
-              child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropRightTop(details),
-                child: controlSquare,
-              ),
-            ),
-            // lower left
-            Positioned(
-              left: cropRect.left - halfControlWH,
-              bottom: (model.viewport.bottom - cropRect.bottom) - halfControlWH,
-              child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropLeftBottom(details),
-                child: controlSquare,
-              ),
-            ),
-            // lower right
-            Positioned(
-              left: cropRect.right - halfControlWH,
-              bottom: (model.viewport.bottom - cropRect.bottom) - halfControlWH,
-              child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropRightBottom(details),
-                child: controlSquare,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  Future<ui.Image?> getEditedUiImage() async => model?.getEditedUiImage();
 }
-
-class _ImagePainter extends CustomPainter {
-  _ImagePainter(this._model);
-
-  final EditorModel _model;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawImage(_model.uiImage!, Offset.zero, Paint());
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _CropScrimPainter extends CustomPainter {
-  _CropScrimPainter(this.cropRect);
-
-  ui.Rect cropRect;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final transparentOverlayPaint = Paint()
-      ..color = Colors.black.withOpacity(0.5);
-    canvas.drawPath(
-        Path.combine(
-            PathOperation.difference,
-            Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height)),
-            Path()..addRect(cropRect)),
-        transparentOverlayPaint);
-    final linePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..color = Colors.white.withOpacity(0.6);
-    canvas.drawRect(cropRect, linePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/*
-                Image.memory(
-                  _model.imageBytes,
-                  // "medium" provides better scaling results than "high" - see https://github.com/flutter/flutter/issues/79645#issuecomment-819920763.
-                  filterQuality: FilterQuality.medium,
-                ),
-
- */

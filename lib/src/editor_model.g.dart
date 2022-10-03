@@ -81,21 +81,93 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
-  late final _$_cropRectAtom =
-      Atom(name: 'EditorModelBase._cropRect', context: context);
+  late final _$_physicalCropRectAtom =
+      Atom(name: 'EditorModelBase._physicalCropRect', context: context);
 
-  Rect get cropRect {
-    _$_cropRectAtom.reportRead();
-    return super._cropRect;
+  Rect get physicalCropRect {
+    _$_physicalCropRectAtom.reportRead();
+    return super._physicalCropRect;
   }
 
   @override
-  Rect get _cropRect => cropRect;
+  Rect get _physicalCropRect => physicalCropRect;
 
   @override
-  set _cropRect(Rect value) {
-    _$_cropRectAtom.reportWrite(value, super._cropRect, () {
-      super._cropRect = value;
+  set _physicalCropRect(Rect value) {
+    _$_physicalCropRectAtom.reportWrite(value, super._physicalCropRect, () {
+      super._physicalCropRect = value;
+    });
+  }
+
+  late final _$_controlCropRectAtom =
+      Atom(name: 'EditorModelBase._controlCropRect', context: context);
+
+  Rect get controlCropRect {
+    _$_controlCropRectAtom.reportRead();
+    return super._controlCropRect;
+  }
+
+  @override
+  Rect get _controlCropRect => controlCropRect;
+
+  @override
+  set _controlCropRect(Rect value) {
+    _$_controlCropRectAtom.reportWrite(value, super._controlCropRect, () {
+      super._controlCropRect = value;
+    });
+  }
+
+  late final _$_selectedToolAtom =
+      Atom(name: 'EditorModelBase._selectedTool', context: context);
+
+  Tool get selectedTool {
+    _$_selectedToolAtom.reportRead();
+    return super._selectedTool;
+  }
+
+  @override
+  Tool get _selectedTool => selectedTool;
+
+  @override
+  set _selectedTool(Tool value) {
+    _$_selectedToolAtom.reportWrite(value, super._selectedTool, () {
+      super._selectedTool = value;
+    });
+  }
+
+  late final _$_viewportOverlaysAtom =
+      Atom(name: 'EditorModelBase._viewportOverlays', context: context);
+
+  ObservableList<Widget> get viewportOverlays {
+    _$_viewportOverlaysAtom.reportRead();
+    return super._viewportOverlays;
+  }
+
+  @override
+  ObservableList<Widget> get _viewportOverlays => viewportOverlays;
+
+  @override
+  set _viewportOverlays(ObservableList<Widget> value) {
+    _$_viewportOverlaysAtom.reportWrite(value, super._viewportOverlays, () {
+      super._viewportOverlays = value;
+    });
+  }
+
+  late final _$_zoomScaleAtom =
+      Atom(name: 'EditorModelBase._zoomScale', context: context);
+
+  double get zoomScale {
+    _$_zoomScaleAtom.reportRead();
+    return super._zoomScale;
+  }
+
+  @override
+  double get _zoomScale => zoomScale;
+
+  @override
+  set _zoomScale(double value) {
+    _$_zoomScaleAtom.reportWrite(value, super._zoomScale, () {
+      super._zoomScale = value;
     });
   }
 
@@ -117,6 +189,14 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
+  late final _$_initializeAsyncAction =
+      AsyncAction('EditorModelBase._initialize', context: context);
+
+  @override
+  Future<void> _initialize(Uint8List imageBytes) {
+    return _$_initializeAsyncAction.run(() => super._initialize(imageBytes));
+  }
+
   late final _$EditorModelBaseActionController =
       ActionController(name: 'EditorModelBase', context: context);
 
@@ -132,11 +212,44 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
+  void selectTool(Tool tool, {bool cancelCropping = true}) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.selectTool');
+    try {
+      return super.selectTool(tool, cancelCropping: cancelCropping);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   void startCrop() {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
         name: 'EditorModelBase.startCrop');
     try {
       return super.startCrop();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void cancelCrop({bool selectDefaultTool = true}) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.cancelCrop');
+    try {
+      return super.cancelCrop(selectDefaultTool: selectDefaultTool);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void clearCrop() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.clearCrop');
+    try {
+      return super.clearCrop();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
@@ -181,6 +294,17 @@ mixin _$EditorModel on EditorModelBase, Store {
         name: 'EditorModelBase.updateCropRightBottom');
     try {
       return super.updateCropRightBottom(details);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void applyCrop() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.applyCrop');
+    try {
+      return super.applyCrop();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }

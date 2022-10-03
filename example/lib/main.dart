@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'VscImageEditor Demo',
+      title: 'VscImageEditor Example',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -35,6 +35,7 @@ class _Example extends StatefulWidget {
 
 class _ExampleState extends State<_Example> {
   Uint8List? _imageBytes;
+  VscImageEditorController controller = VscImageEditorController();
 
   @override
   void initState() {
@@ -52,12 +53,46 @@ class _ExampleState extends State<_Example> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('VscImageEditor Demo'),
+        title: const Text('VscImageEditor Example'),
+        actions: [
+          ElevatedButton(
+            onPressed: _save,
+            child: const Text('Save'),
+          ),
+          const SizedBox(width: 24), // Avoid the "Debug" banner
+        ],
       ),
       // "medium" provides better scaling results than "high" - see https://github.com/flutter/flutter/issues/79645#issuecomment-819920763.
       body: _imageBytes == null
           ? const SizedBox.shrink()
-          : VscImageEditor(imageBytes: _imageBytes!),
+          : VscImageEditor(
+              imageBytes: _imageBytes!,
+              controller: controller,
+            ),
     );
+  }
+
+  Future<void> _save() async {
+    final image = await controller.getEditedUiImage();
+    if (image == null) {
+      throw Exception('Image is null');
+    }
+
+    final byteData = await image.toByteData();
+    if (byteData == null) {
+      throw Exception('ByteData is null');
+    }
+
+    final rawBytes = byteData.buffer.asUint8List();
+
+    final internalImage = img.Image(
+      image.width,
+      image.height,
+    );
+    final encodedBytes = img.encodeJpg(internalImage!, quality: 99);
+
+    final out = File('Test-image-out.jpg');
+    out.writeAsBytesSync(encodedBytes, flush: true);
+    debugPrint('Wrote file');
   }
 }
