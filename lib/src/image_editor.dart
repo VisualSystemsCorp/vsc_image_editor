@@ -58,6 +58,36 @@ class VscImageEditorState extends State<VscImageEditor> {
           ),
         )
         .toList(growable: false);
+    final zoomItems = [
+      PopupMenuItem(
+        child: const Text('400%'),
+        onTap: () => _model.setScale(4.0),
+      ),
+      PopupMenuItem(
+        child: const Text('200%'),
+        onTap: () => _model.setScale(2.0),
+      ),
+      PopupMenuItem(
+        child: const Text('100%'),
+        onTap: () => _model.setScale(1.0),
+      ),
+      PopupMenuItem(
+        child: const Text('50%'),
+        onTap: () => _model.setScale(0.5),
+      ),
+      PopupMenuItem(
+        child: const Text('25%'),
+        onTap: () => _model.setScale(0.25),
+      ),
+      PopupMenuItem(
+        child: const Text('12%'),
+        onTap: () => _model.setScale(0.12),
+      ),
+      PopupMenuItem(
+        child: const Text('View full image'),
+        onTap: () => _model.scaleToFitViewport(),
+      ),
+    ];
 
     return Observer(builder: (context) {
       if (!_model.initialized) {
@@ -76,6 +106,8 @@ class VscImageEditorState extends State<VscImageEditor> {
                 _model.setViewportSize(
                     constraints.maxWidth, constraints.maxHeight);
                 return Observer(builder: (context) {
+                  // Need to listen to this to repaint image.
+                  _model.physicalCropRotationMatrix;
                   return Stack(
                     children: [
                       Positioned.fill(
@@ -83,10 +115,10 @@ class VscImageEditorState extends State<VscImageEditor> {
                           initTotalZoomOut: true,
                           enableScroll: false,
                           transformationController:
-                              _model.transformationController,
+                              _model.viewportTransformationController,
                           child: SizedBox(
-                            width: _model.physicalCropRect.width,
-                            height: _model.physicalCropRect.height,
+                            width: _model.physicalRotatedCropRect.width,
+                            height: _model.physicalRotatedCropRect.height,
                             child: CustomPaint(
                               painter: _model.imagePainter,
                             ),
@@ -119,12 +151,12 @@ class VscImageEditorState extends State<VscImageEditor> {
                     ),
                   ),
                   IconButton(
-                    onPressed: () {},
+                    onPressed: () => _model.rotate90Left(),
                     icon: const Icon(Icons.rotate_90_degrees_ccw_outlined),
                     tooltip: 'Rotate left',
                   ),
                   IconButton(
-                    onPressed: () {},
+                    onPressed: () => _model.rotate90Right(),
                     icon: const Icon(Icons.rotate_90_degrees_cw_outlined),
                     tooltip: 'Rotate right',
                   ),
@@ -138,17 +170,15 @@ class VscImageEditorState extends State<VscImageEditor> {
                     icon: const Icon(Icons.color_lens, color: Colors.red),
                     tooltip: 'Color',
                   ),
-                  Tooltip(
-                    message: 'Zoom',
-                    child: TextButton(
-                      onPressed: () {},
-                      child: Row(
-                        children: [
-                          Text(
-                              '${(_model.zoomScale * 100).toStringAsFixed(1)}%'),
-                          const Icon(Icons.arrow_drop_up),
-                        ],
-                      ),
+                  PopupMenuButton(
+                    itemBuilder: (context) => zoomItems,
+                    tooltip: 'Zoom',
+                    offset: const Offset(48, 0),
+                    child: Row(
+                      children: [
+                        Text('${(_model.zoomScale * 100).toStringAsFixed(1)}%'),
+                        const Icon(Icons.arrow_drop_up),
+                      ],
                     ),
                   ),
                 ],

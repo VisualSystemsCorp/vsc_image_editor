@@ -1,4 +1,4 @@
-name: example
+name: vsc_image_editor_example
 description: An example using vsc_image_editor.
 
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -14,6 +14,7 @@ dependencies:
   vsc_image_editor:
     path: ../
   image: ^3.2.0
+  share_plus: ^4.4.0
 
 dev_dependencies:
   flutter_test:

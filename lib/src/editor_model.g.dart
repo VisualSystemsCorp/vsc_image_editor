@@ -27,39 +27,64 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
-  late final _$_physicalWidthAtom =
-      Atom(name: 'EditorModelBase._physicalWidth', context: context);
+  late final _$_fullImageNonRotatedPhysicalWidthAtom = Atom(
+      name: 'EditorModelBase._fullImageNonRotatedPhysicalWidth',
+      context: context);
 
-  double get physicalWidth {
-    _$_physicalWidthAtom.reportRead();
-    return super._physicalWidth;
+  double get fullImageNonRotatedPhysicalWidth {
+    _$_fullImageNonRotatedPhysicalWidthAtom.reportRead();
+    return super._fullImageNonRotatedPhysicalWidth;
   }
 
   @override
-  double get _physicalWidth => physicalWidth;
+  double get _fullImageNonRotatedPhysicalWidth =>
+      fullImageNonRotatedPhysicalWidth;
 
   @override
-  set _physicalWidth(double value) {
-    _$_physicalWidthAtom.reportWrite(value, super._physicalWidth, () {
-      super._physicalWidth = value;
+  set _fullImageNonRotatedPhysicalWidth(double value) {
+    _$_fullImageNonRotatedPhysicalWidthAtom
+        .reportWrite(value, super._fullImageNonRotatedPhysicalWidth, () {
+      super._fullImageNonRotatedPhysicalWidth = value;
     });
   }
 
-  late final _$_physicalHeightAtom =
-      Atom(name: 'EditorModelBase._physicalHeight', context: context);
+  late final _$_fullImageNonRotatedPhysicalHeightAtom = Atom(
+      name: 'EditorModelBase._fullImageNonRotatedPhysicalHeight',
+      context: context);
 
-  double get physicalHeight {
-    _$_physicalHeightAtom.reportRead();
-    return super._physicalHeight;
+  double get fullImageNonRotatedPhysicalHeight {
+    _$_fullImageNonRotatedPhysicalHeightAtom.reportRead();
+    return super._fullImageNonRotatedPhysicalHeight;
   }
 
   @override
-  double get _physicalHeight => physicalHeight;
+  double get _fullImageNonRotatedPhysicalHeight =>
+      fullImageNonRotatedPhysicalHeight;
 
   @override
-  set _physicalHeight(double value) {
-    _$_physicalHeightAtom.reportWrite(value, super._physicalHeight, () {
-      super._physicalHeight = value;
+  set _fullImageNonRotatedPhysicalHeight(double value) {
+    _$_fullImageNonRotatedPhysicalHeightAtom
+        .reportWrite(value, super._fullImageNonRotatedPhysicalHeight, () {
+      super._fullImageNonRotatedPhysicalHeight = value;
+    });
+  }
+
+  late final _$_physicalNonRotatedCropRectAtom = Atom(
+      name: 'EditorModelBase._physicalNonRotatedCropRect', context: context);
+
+  Rect get physicalNonRotatedCropRect {
+    _$_physicalNonRotatedCropRectAtom.reportRead();
+    return super._physicalNonRotatedCropRect;
+  }
+
+  @override
+  Rect get _physicalNonRotatedCropRect => physicalNonRotatedCropRect;
+
+  @override
+  set _physicalNonRotatedCropRect(Rect value) {
+    _$_physicalNonRotatedCropRectAtom
+        .reportWrite(value, super._physicalNonRotatedCropRect, () {
+      super._physicalNonRotatedCropRect = value;
     });
   }
 
@@ -81,21 +106,22 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
-  late final _$_physicalCropRectAtom =
-      Atom(name: 'EditorModelBase._physicalCropRect', context: context);
+  late final _$_physicalCropRotationMatrixAtom = Atom(
+      name: 'EditorModelBase._physicalCropRotationMatrix', context: context);
 
-  Rect get physicalCropRect {
-    _$_physicalCropRectAtom.reportRead();
-    return super._physicalCropRect;
+  Matrix4 get physicalCropRotationMatrix {
+    _$_physicalCropRotationMatrixAtom.reportRead();
+    return super._physicalCropRotationMatrix;
   }
 
   @override
-  Rect get _physicalCropRect => physicalCropRect;
+  Matrix4 get _physicalCropRotationMatrix => physicalCropRotationMatrix;
 
   @override
-  set _physicalCropRect(Rect value) {
-    _$_physicalCropRectAtom.reportWrite(value, super._physicalCropRect, () {
-      super._physicalCropRect = value;
+  set _physicalCropRotationMatrix(Matrix4 value) {
+    _$_physicalCropRotationMatrixAtom
+        .reportWrite(value, super._physicalCropRotationMatrix, () {
+      super._physicalCropRotationMatrix = value;
     });
   }
 
@@ -217,6 +243,50 @@ mixin _$EditorModel on EditorModelBase, Store {
         name: 'EditorModelBase.selectTool');
     try {
       return super.selectTool(tool, cancelCropping: cancelCropping);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setScale(double scale) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setScale');
+    try {
+      return super.setScale(scale);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void scaleToFitViewport() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.scaleToFitViewport');
+    try {
+      return super.scaleToFitViewport();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void rotate90Left() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.rotate90Left');
+    try {
+      return super.rotate90Left();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void rotate90Right() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.rotate90Right');
+    try {
+      return super.rotate90Right();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }

@@ -2,9 +2,11 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide TransformationController;
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:mobx/mobx.dart';
+import 'package:vector_math/vector_math_64.dart' hide Colors;
 import 'package:zoom_widget/zoom_widget.dart';
 
 part 'editor_model.g.dart';
@@ -22,6 +24,9 @@ enum Tool {
   final IconData icon;
 }
 
+const _radians90Left = -pi / 2;
+const _radians90Right = pi / 2;
+
 class EditorModel = EditorModelBase with _$EditorModel;
 
 abstract class EditorModelBase with Store {
@@ -29,7 +34,7 @@ abstract class EditorModelBase with Store {
     _initialize(imageBytes);
   }
 
-  final TransformationController transformationController =
+  final TransformationController viewportTransformationController =
       TransformationController();
   late final ImagePainter imagePainter;
 
@@ -37,19 +42,38 @@ abstract class EditorModelBase with Store {
   ui.Image? _uiImage;
 
   @readonly
-  double _physicalWidth = 0;
+  double _fullImageNonRotatedPhysicalWidth = 0;
 
   @readonly
-  double _physicalHeight = 0;
+  double _fullImageNonRotatedPhysicalHeight = 0;
+
+  ui.Rect get fullImageRotatedPhysicalRect => MatrixUtils.transformRect(
+      _physicalCropRotationMatrix,
+      Rect.fromLTWH(0, 0, _fullImageNonRotatedPhysicalWidth,
+          _fullImageNonRotatedPhysicalHeight));
+
+  double get fullImageRotatedPhysicalWidth =>
+      fullImageRotatedPhysicalRect.width;
+  double get fullImageRotatedPhysicalHeight =>
+      fullImageRotatedPhysicalRect.height;
+
+  /// The non-rotated cropping rectangle with dimensions in respect to the full image width/height.
+  @readonly
+  ui.Rect _physicalNonRotatedCropRect = ui.Rect.zero;
+
+  /// The rotated cropping rectangle with dimensions in respect to the full image width/height.
+  ui.Rect get physicalRotatedCropRect => MatrixUtils.transformRect(
+      _physicalCropRotationMatrix, _physicalNonRotatedCropRect);
 
   @readonly
   ui.Rect _viewport = ui.Rect.zero;
 
+  /// The rotation matrix with respect to the full image - how much the image has been rotated.
   @readonly
-  ui.Rect _physicalCropRect = ui.Rect.zero;
+  var _physicalCropRotationMatrix = Matrix4.identity();
 
   // We save current physical crop during cropping in case it is canceled.
-  ui.Rect _savedPhysicalCropRect = ui.Rect.zero;
+  ui.Rect _savedPhysicalNonRotatedCropRect = ui.Rect.zero;
 
   @readonly
   ui.Rect _controlCropRect = ui.Rect.zero;
@@ -70,29 +94,30 @@ abstract class EditorModelBase with Store {
   @action
   Future<void> _initialize(Uint8List imageBytes) async {
     imagePainter = ImagePainter(this as EditorModel);
-    transformationController.addListener(() {
-      _zoomScale = transformationController.value.getMaxScaleOnAxis();
+    viewportTransformationController.addListener(() {
+      _zoomScale = viewportTransformationController.value.getMaxScaleOnAxis();
     });
 
     final codec = await ui.instantiateImageCodec(imageBytes);
     final frame = await codec.getNextFrame();
     _uiImage = frame.image;
-    _physicalWidth = _uiImage!.width.toDouble();
-    _physicalHeight = _uiImage!.height.toDouble();
-    _physicalCropRect = ui.Rect.fromLTWH(0, 0, _physicalWidth, _physicalHeight);
+    _fullImageNonRotatedPhysicalWidth = _uiImage!.width.toDouble();
+    _fullImageNonRotatedPhysicalHeight = _uiImage!.height.toDouble();
+    _physicalNonRotatedCropRect = ui.Rect.fromLTWH(0, 0,
+        _fullImageNonRotatedPhysicalWidth, _fullImageNonRotatedPhysicalHeight);
 
     _initialized = true;
   }
 
   void dispose() {
     _uiImage?.dispose();
-    transformationController.dispose();
+    viewportTransformationController.dispose();
   }
 
   @action
   void setViewportSize(double width, double height) {
     _viewport = ui.Rect.fromLTWH(_viewport.left, _viewport.top, width, height);
-    debugPrint('viewport updated $_viewport');
+    // debugPrint('viewport updated $_viewport');
   }
 
   @action
@@ -116,17 +141,69 @@ abstract class EditorModelBase with Store {
     }
   }
 
+  /// Sets the new scale, which also resets the pan (translation).
+  @action
+  void setScale(double scale) {
+    final rotation = Quaternion.identity();
+    final scaleVector = Vector3.zero();
+    viewportTransformationController.value
+        .decompose(Vector3.zero(), rotation, scaleVector);
+
+    // No change? Don't reset translation.
+    if (scaleVector.x == scale) return;
+
+    viewportTransformationController.value =
+        Matrix4.compose(Vector3.zero(), rotation, Vector3(scale, scale, scale));
+  }
+
+  /// Scale image to fit the viewport and reset the pan.
+  @action
+  void scaleToFitViewport() {
+    final scale = min(_viewport.width / physicalRotatedCropRect.width,
+        _viewport.height / physicalRotatedCropRect.height);
+    setScale(scale);
+  }
+
+  /// Rotate the image 90 degrees to the left (CCW). Pan/translation is reset and image is scaled to fit the viewport.
+  @action
+  void rotate90Left() {
+    // Cancel cropping if user decided to rotate while cropping.
+    if (_selectedTool == Tool.crop) {
+      cancelCrop();
+    }
+
+    // Rotate around 0,0 and adjust the rotated Y origin down with respect to the full image width
+    _physicalCropRotationMatrix = _physicalCropRotationMatrix.clone()
+      ..translate(0.0, fullImageRotatedPhysicalWidth)
+      ..multiply(Matrix4.rotationZ(_radians90Left));
+
+    scaleToFitViewport();
+  }
+
+  /// Rotate the image 90 degrees to the right (CW). Pan/translation is reset and image is scaled to fit the viewport.
+  @action
+  void rotate90Right() {
+    // Cancel cropping if user decided to rotate while cropping.
+    if (_selectedTool == Tool.crop) {
+      cancelCrop();
+    }
+
+    // Rotate around 0,0 and adjust the rotated X origin left with respect to the full image height
+    _physicalCropRotationMatrix = _physicalCropRotationMatrix.clone()
+      ..translate(fullImageRotatedPhysicalHeight, 0.0)
+      ..multiply(Matrix4.rotationZ(_radians90Right));
+
+    scaleToFitViewport();
+  }
+
   @action
   void startCrop() {
     // Reset any current crop
-    _savedPhysicalCropRect = _physicalCropRect;
+    _savedPhysicalNonRotatedCropRect = _physicalNonRotatedCropRect;
     clearCrop();
 
     // Zoom so full image fits viewport, and reset pan
-    // TODO Rotation!
-    final scale = min(
-        _viewport.width / _physicalWidth, _viewport.height / _physicalHeight);
-    transformationController.value = Matrix4.identity()..scale(scale);
+    scaleToFitViewport();
 
     final insetX = _viewport.width * 0.10;
     final insetY = _viewport.height * 0.10;
@@ -140,7 +217,8 @@ abstract class EditorModelBase with Store {
 
   @action
   void cancelCrop({bool selectDefaultTool = true}) {
-    _physicalCropRect = _savedPhysicalCropRect;
+    _physicalNonRotatedCropRect = _savedPhysicalNonRotatedCropRect;
+    scaleToFitViewport();
     if (selectDefaultTool) {
       selectTool(Tool.select);
     }
@@ -148,7 +226,8 @@ abstract class EditorModelBase with Store {
 
   @action
   void clearCrop() {
-    _physicalCropRect = ui.Rect.fromLTWH(0, 0, _physicalWidth, _physicalHeight);
+    _physicalNonRotatedCropRect = ui.Rect.fromLTWH(0, 0,
+        _fullImageNonRotatedPhysicalWidth, _fullImageNonRotatedPhysicalHeight);
   }
 
   @action
@@ -175,8 +254,7 @@ abstract class EditorModelBase with Store {
 
     // Cannot be out of bounds of image.
     final imageViewportRect = MatrixUtils.transformRect(
-        transformationController.value,
-        ui.Rect.fromLTWH(0, 0, _physicalWidth, _physicalHeight));
+        viewportTransformationController.value, fullImageRotatedPhysicalRect);
     if (left < imageViewportRect.left) {
       left = imageViewportRect.left;
     }
@@ -229,10 +307,11 @@ abstract class EditorModelBase with Store {
   @action
   void applyCrop() {
     // debugPrint('Before: $_physicalCropRect control=$_controlCropRect');
-    _physicalCropRect = MatrixUtils.transformRect(
-        Matrix4.copy(transformationController.value)..invert(),
+    final physicalRotatedCropRect = MatrixUtils.transformRect(
+        viewportTransformationController.value.clone()..invert(),
         _controlCropRect);
-    // debugPrint('after $_physicalCropRect');
+    _physicalNonRotatedCropRect = MatrixUtils.transformRect(
+        _physicalCropRotationMatrix.clone()..invert(), physicalRotatedCropRect);
     selectTool(Tool.select, cancelCropping: false);
   }
 
@@ -241,7 +320,8 @@ abstract class EditorModelBase with Store {
     final canvas = Canvas(recorder);
     imagePainter.paint(canvas, Size.zero);
     return recorder.endRecording().toImage(
-        _physicalCropRect.width.floor(), _physicalCropRect.height.floor());
+        physicalRotatedCropRect.width.floor(),
+        physicalRotatedCropRect.height.floor());
   }
 }
 
@@ -337,12 +417,16 @@ class _CropScrimPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final transparentOverlayPaint = Paint()
       ..color = Colors.black.withOpacity(0.5);
-    canvas.drawPath(
-        Path.combine(
-            PathOperation.difference,
-            Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height)),
-            Path()..addRect(cropRect)),
-        transparentOverlayPaint);
+    // Difference doesn't seem to work on web with flutter 3.3.3 https://github.com/flutter/flutter/issues/44572#issuecomment-1079774078
+    if (!kIsWeb) {
+      canvas.drawPath(
+          Path.combine(
+              PathOperation.difference,
+              Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height)),
+              Path()..addRect(cropRect)),
+          transparentOverlayPaint);
+    }
+
     final linePaint = Paint()
       ..style = PaintingStyle.stroke
       ..color = Colors.white.withOpacity(0.6);
@@ -359,15 +443,19 @@ class ImagePainter extends CustomPainter {
   final EditorModel _model;
 
   @override
-  void paint(Canvas canvas, Size _) {
-    canvas.translate(
-        -_model.physicalCropRect.left, -_model.physicalCropRect.top);
-    canvas.clipRect(_model.physicalCropRect);
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.translate(-_model.physicalRotatedCropRect.left,
+        -_model.physicalRotatedCropRect.top);
+    canvas.clipRect(_model.physicalRotatedCropRect);
+    canvas.transform(_model.physicalCropRotationMatrix.storage);
     canvas.drawImage(
       _model.uiImage!,
       Offset.zero,
       Paint()..filterQuality = FilterQuality.medium,
     );
+
+    canvas.restore();
   }
 
   @override
