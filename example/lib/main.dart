@@ -85,11 +85,9 @@ class _ExampleState extends State<_Example> {
 
     final rawBytes = byteData.buffer.asUint8List();
 
-    final internalImage = img.Image(
-      image.width,
-      image.height,
-    );
-    final encodedBytes = img.encodeJpg(internalImage!, quality: 99);
+    final internalImage =
+        img.Image.fromBytes(image.width, image.height, rawBytes);
+    final encodedBytes = img.encodeJpg(internalImage, quality: 99);
 
     final out = File('Test-image-out.jpg');
     out.writeAsBytesSync(encodedBytes, flush: true);
