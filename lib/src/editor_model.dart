@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide TransformationController;
 import 'package:flutter_mobx/flutter_mobx.dart';
-import 'package:mobx/mobx.dart';
+import 'package:mobx/mobx.dart' hide Listenable;
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 import 'package:zoom_widget/zoom_widget.dart';
 
@@ -94,12 +94,11 @@ abstract class EditorModelBase with Store {
 
   Path? _activePath;
 
-  @readonly
-  bool _imagePainterTrigger = false;
+  final _imagePainterNotifier = ValueNotifier<bool>(false);
 
   @action
   Future<void> _initialize(Uint8List imageBytes) async {
-    _imagePainter = ImagePainter(this as EditorModel);
+    _imagePainter = _ImagePainter(this as EditorModel, _imagePainterNotifier);
     imagePainterWidget = _ImagePainterWidget(model: this as EditorModel);
 
     viewportTransformationController.addListener(() {
@@ -122,13 +121,19 @@ abstract class EditorModelBase with Store {
     viewportTransformationController.dispose();
   }
 
-  @action
-  void updateImage() => _imagePainterTrigger = !_imagePainterTrigger;
+  void updateImage() =>
+      _imagePainterNotifier.value = !_imagePainterNotifier.value;
 
   @action
   void setViewportSize(double width, double height) {
-    _viewport = ui.Rect.fromLTWH(_viewport.left, _viewport.top, width, height);
-    // debugPrint('viewport updated $_viewport');
+    final newViewPort =
+        ui.Rect.fromLTWH(_viewport.left, _viewport.top, width, height);
+    if (newViewPort != _viewport) {
+      _viewport = newViewPort;
+      // debugPrint('viewport updated $_viewport');
+      // NOTE: This causes issues with the viewport changing again when we're trying to set the size.
+      // scaleToFitViewport();
+    }
   }
 
   @action
@@ -434,35 +439,73 @@ class _CropControl extends StatelessWidget {
 }
 
 class _DrawControl extends StatelessWidget {
-  const _DrawControl({Key? key, required this.model}) : super(key: key);
+  _DrawControl({Key? key, required this.model}) : super(key: key);
 
   final EditorModel model;
+  final _painterNotifier = ValueNotifier<bool>(false);
 
   @override
   Widget build(BuildContext context) {
     return Observer(
       builder: (context) {
-        return GestureDetector(
-          onPanStart: (start) {
-            model._activePath ??= Path();
-            model._activePath!
-                .moveTo(start.globalPosition.dx, start.globalPosition.dy);
-            model.updateImage();
-            debugPrint('onPanStart');
-          },
-          onPanEnd: (_) {
-            debugPrint('onPanEnd');
-          },
-          onPanUpdate: (update) {
-            model._activePath!
-                .lineTo(update.globalPosition.dx, update.globalPosition.dy);
-            model.updateImage();
-            debugPrint('onPanUpdate');
-          },
+        return SizedBox(
+          width: model.physicalRotatedCropRect.width,
+          height: model.physicalRotatedCropRect.height,
+          child: GestureDetector(
+            onPanStart: (start) {
+              model._activePath ??= Path();
+              final pt =
+                  _transformViewportPointToFullImage(start.localPosition);
+              model._activePath!.moveTo(pt.dx, pt.dy);
+              _repaintDrawing();
+            },
+            onPanEnd: (_) {},
+            onPanUpdate: (update) {
+              // debugPrint('onDrawUpdate');
+              final pt =
+                  _transformViewportPointToFullImage(update.localPosition);
+              model._activePath!.lineTo(pt.dx, pt.dy);
+              _repaintDrawing();
+            },
+            child: CustomPaint(
+              // TODO I can't explain why, but this do-nothing painter is required to get the image to update.
+              //  It may be because it repaints on the _painterNotifier change, but not sure.
+              //  Also, just calling model.updateImage() in onPanUpdate doesn't cause the drawing to repaint until
+              //  the pointer moves out of the window, or over a button.
+              painter: _StubPainter(_painterNotifier),
+            ),
+          ),
         );
       },
     );
   }
+
+  void _repaintDrawing() => _painterNotifier.value = !_painterNotifier.value;
+
+  Offset _transformViewportPointToFullImage(Offset pt) {
+    // This matrix goes from viewport coordinates to full-image coordinates
+    final inverseViewportM =
+        model.viewportTransformationController.value.clone()..invert();
+    final physicalCroppedRotatedPt =
+        MatrixUtils.transformPoint(inverseViewportM, pt);
+    // Uncrop the point (untranslate by the rotated crop offset)
+    final physicalRotatedPt =
+        physicalCroppedRotatedPt + model.physicalRotatedCropRect.topLeft;
+    // Unrotate the point
+    final physicalRawPt = MatrixUtils.transformPoint(
+        model.physicalCropRotationMatrix.clone()..invert(), physicalRotatedPt);
+    return physicalRawPt;
+  }
+}
+
+class _StubPainter extends CustomPainter {
+  _StubPainter(Listenable repaint) : super(repaint: repaint);
+
+  @override
+  void paint(Canvas canvas, Size size) {}
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _CropScrimPainter extends CustomPainter {
@@ -474,15 +517,32 @@ class _CropScrimPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final transparentOverlayPaint = Paint()
       ..color = Colors.black.withOpacity(0.5);
-    // Difference doesn't seem to work on web with flutter 3.3.3 https://github.com/flutter/flutter/issues/44572#issuecomment-1079774078
-    if (!kIsWeb) {
-      canvas.drawPath(
-          Path.combine(
-              PathOperation.difference,
-              Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height)),
-              Path()..addRect(cropRect)),
-          transparentOverlayPaint);
-    }
+
+    // Difference doesn't seem to work on web with flutter 3.3.3, see:
+    // https://github.com/flutter/flutter/issues/44572#issuecomment-1079774078
+    // So we just draw four rects instead.
+    // canvas.drawPath(
+    //     Path.combine(
+    //         PathOperation.difference,
+    //         Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height)),
+    //         Path()..addRect(cropRect)),
+    //     transparentOverlayPaint);
+
+    // Top rect
+    canvas.drawRect(
+        Rect.fromLTRB(0, 0, size.width, cropRect.top), transparentOverlayPaint);
+    // Left rect
+    canvas.drawRect(
+        Rect.fromLTRB(0, cropRect.top, cropRect.left, cropRect.bottom),
+        transparentOverlayPaint);
+    // Right rect
+    canvas.drawRect(
+        Rect.fromLTRB(
+            cropRect.right, cropRect.top, size.width, cropRect.bottom),
+        transparentOverlayPaint);
+    // Bottom rect
+    canvas.drawRect(Rect.fromLTRB(0, cropRect.bottom, size.width, size.height),
+        transparentOverlayPaint);
 
     final linePaint = Paint()
       ..style = PaintingStyle.stroke
@@ -501,30 +561,45 @@ class _ImagePainterWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Observer(
-      builder: (context) {
-        // Listen to the counter for updates
-        model.imagePainterTrigger;
-        debugPrint('updating');
-        return CustomPaint(painter: model._imagePainter);
-      },
-    );
+    return Observer(builder: (context) {
+      return CustomPaint(
+        size: model.physicalRotatedCropRect.size,
+        foregroundPainter: model._imagePainter,
+        willChange: true,
+        isComplex: true,
+      );
+    });
   }
 }
 
-class ImagePainter extends CustomPainter {
-  ImagePainter(this._model);
+abstract class _ViewportPainter extends CustomPainter {
+  _ViewportPainter(this._model, Listenable repaint) : super(repaint: repaint);
 
   final EditorModel _model;
 
+  void paintTransformed(Canvas canvas, Size size);
+
   @override
   void paint(Canvas canvas, Size size) {
-    debugPrint('PAINT');
     canvas.save();
     canvas.translate(-_model.physicalRotatedCropRect.left,
         -_model.physicalRotatedCropRect.top);
     canvas.clipRect(_model.physicalRotatedCropRect);
     canvas.transform(_model.physicalCropRotationMatrix.storage);
+
+    paintTransformed(canvas, size);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _ViewportPainter oldDelegate) => false;
+}
+
+class _ImagePainter extends _ViewportPainter {
+  _ImagePainter(EditorModel model, Listenable repaint) : super(model, repaint);
+
+  @override
+  void paintTransformed(Canvas canvas, Size size) {
     canvas.drawImage(
       _model.uiImage!,
       Offset.zero,
@@ -535,16 +610,14 @@ class ImagePainter extends CustomPainter {
       final pathPaint = Paint()
         ..color = Colors.green
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
+        ..strokeWidth = 5
         ..strokeCap = StrokeCap.round;
       canvas.drawPath(_model._activePath!, pathPaint);
     }
-
-    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ImagePainter oldDelegate) => false;
 }
 
 /*

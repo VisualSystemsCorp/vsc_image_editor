@@ -215,25 +215,6 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
-  late final _$_imagePainterTriggerAtom =
-      Atom(name: 'EditorModelBase._imagePainterTrigger', context: context);
-
-  bool get imagePainterTrigger {
-    _$_imagePainterTriggerAtom.reportRead();
-    return super._imagePainterTrigger;
-  }
-
-  @override
-  bool get _imagePainterTrigger => imagePainterTrigger;
-
-  @override
-  set _imagePainterTrigger(bool value) {
-    _$_imagePainterTriggerAtom.reportWrite(value, super._imagePainterTrigger,
-        () {
-      super._imagePainterTrigger = value;
-    });
-  }
-
   late final _$_initializeAsyncAction =
       AsyncAction('EditorModelBase._initialize', context: context);
 
@@ -244,17 +225,6 @@ mixin _$EditorModel on EditorModelBase, Store {
 
   late final _$EditorModelBaseActionController =
       ActionController(name: 'EditorModelBase', context: context);
-
-  @override
-  void updateImage() {
-    final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateImage');
-    try {
-      return super.updateImage();
-    } finally {
-      _$EditorModelBaseActionController.endAction(_$actionInfo);
-    }
-  }
 
   @override
   void setViewportSize(double width, double height) {

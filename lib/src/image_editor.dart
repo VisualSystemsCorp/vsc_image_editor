@@ -106,7 +106,6 @@ class VscImageEditorState extends State<VscImageEditor> {
                 _model.setViewportSize(
                     constraints.maxWidth, constraints.maxHeight);
                 return Observer(builder: (context) {
-                  // Need to listen to this to repaint image.
                   return Stack(
                     children: [
                       Positioned.fill(
@@ -115,11 +114,7 @@ class VscImageEditorState extends State<VscImageEditor> {
                           enableScroll: false,
                           transformationController:
                               _model.viewportTransformationController,
-                          child: SizedBox(
-                            width: _model.physicalRotatedCropRect.width,
-                            height: _model.physicalRotatedCropRect.height,
-                            child: _model.imagePainterWidget,
-                          ),
+                          child: _model.imagePainterWidget,
                         ),
                       ),
                       Positioned.fill(
@@ -159,7 +154,7 @@ class VscImageEditorState extends State<VscImageEditor> {
                   ),
                   IconButton(
                     onPressed: () => _model.clearCrop(),
-                    icon: const Icon(Icons.crop_original_outlined),
+                    icon: const Icon(Icons.fullscreen),
                     tooltip: 'Clear crop',
                   ),
                   IconButton(
