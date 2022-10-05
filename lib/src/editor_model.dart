@@ -27,6 +27,23 @@ enum Tool {
 const _radians90Left = -pi / 2;
 const _radians90Right = pi / 2;
 
+const availableBrushSizes = [
+  5.0,
+  10.0,
+  20.0,
+  30.0,
+  40.0,
+];
+const availableColors = [
+  Colors.yellow,
+  Colors.red,
+  Colors.green,
+  Colors.blue,
+  Colors.purple,
+  Colors.white,
+  Colors.black,
+];
+
 class EditorModel = EditorModelBase with _$EditorModel;
 
 abstract class EditorModelBase with Store {
@@ -38,6 +55,7 @@ abstract class EditorModelBase with Store {
       TransformationController();
   late final CustomPainter _imagePainter;
   late final Widget imagePainterWidget;
+  late final Widget _selectedObjectControl;
 
   @readonly
   ui.Image? _uiImage;
@@ -92,7 +110,21 @@ abstract class EditorModelBase with Store {
   @readonly
   bool _initialized = false;
 
+  @readonly
+  var _brushSize = 10.0;
+
+  @readonly
+  Color _drawingColor = Colors.yellow;
+
+  @readonly
+  _AnnotationObject? _selectedAnnotationObject;
+
+  @readonly
+  var _viewportTransformationMatrix = Matrix4.identity();
+
   Path? _activePath;
+
+  final _annotationObjects = <_AnnotationObject>[];
 
   final _imagePainterNotifier = ValueNotifier<bool>(false);
 
@@ -100,9 +132,11 @@ abstract class EditorModelBase with Store {
   Future<void> _initialize(Uint8List imageBytes) async {
     _imagePainter = _ImagePainter(this as EditorModel, _imagePainterNotifier);
     imagePainterWidget = _ImagePainterWidget(model: this as EditorModel);
+    _selectedObjectControl = _SelectedObjectControl(model: this as EditorModel);
 
     viewportTransformationController.addListener(() {
       _zoomScale = viewportTransformationController.value.getMaxScaleOnAxis();
+      _viewportTransformationMatrix = viewportTransformationController.value;
     });
 
     final codec = await ui.instantiateImageCodec(imageBytes);
@@ -131,8 +165,6 @@ abstract class EditorModelBase with Store {
     if (newViewPort != _viewport) {
       _viewport = newViewPort;
       // debugPrint('viewport updated $_viewport');
-      // NOTE: This causes issues with the viewport changing again when we're trying to set the size.
-      // scaleToFitViewport();
     }
   }
 
@@ -142,7 +174,7 @@ abstract class EditorModelBase with Store {
 
     final lastTool = _selectedTool;
     _selectedTool = tool;
-    if (cancelCropping && lastTool == Tool.crop && tool != Tool.crop) {
+    if (cancelCropping && lastTool == Tool.crop) {
       cancelCrop(selectDefaultTool: false);
     }
 
@@ -156,7 +188,7 @@ abstract class EditorModelBase with Store {
         break;
 
       case Tool.draw:
-        startDraw();
+        startFreeDrawing();
         break;
 
       default:
@@ -251,6 +283,7 @@ abstract class EditorModelBase with Store {
   void clearCrop() {
     _physicalNonRotatedCropRect = ui.Rect.fromLTWH(0, 0,
         _fullImageNonRotatedPhysicalWidth, _fullImageNonRotatedPhysicalHeight);
+    scaleToFitViewport();
   }
 
   @action
@@ -348,10 +381,175 @@ abstract class EditorModelBase with Store {
   }
 
   @action
-  void startDraw() {
+  void startFreeDrawing() {
+    _activePath = null;
     _viewportOverlays
       ..clear()
-      ..add(_DrawControl(model: this as EditorModel));
+      ..add(_FreeDrawControl(model: this as EditorModel));
+  }
+
+  @action
+  void applyDrawing() {
+    if (_activePath != null && !_activePath!.getBounds().isEmpty) {
+      _annotationObjects.add(
+        _PathAnnotationObject(_activePath!, _createPathPaint()),
+      );
+    }
+
+    _activePath = null;
+    selectTool(Tool.select);
+  }
+
+  @action
+  void clearDrawing() {
+    _activePath = null;
+  }
+
+  @action
+  void discardDrawing() {
+    _activePath = null;
+    selectTool(Tool.select);
+  }
+
+  Paint _createPathPaint() {
+    return Paint()
+      ..color = _drawingColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _brushSize
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+  }
+
+  @action
+  void setBrushSize(double size) {
+    _brushSize = size;
+    updateImage();
+  }
+
+  @action
+  void setDrawingColor(Color color) {
+    _drawingColor = color;
+    updateImage();
+  }
+
+  Offset _transformViewportPointToPhysicalImagePoint(Offset pt) {
+    // This matrix goes from viewport coordinates to full-image coordinates
+    final inverseViewportM = _viewportTransformationMatrix.clone()..invert();
+    final physicalCroppedRotatedPt =
+        MatrixUtils.transformPoint(inverseViewportM, pt);
+
+    // Uncrop the point (untranslate by the rotated crop offset)
+    final physicalRotatedPt =
+        physicalCroppedRotatedPt + physicalRotatedCropRect.topLeft;
+
+    // Unrotate the point
+    final physicalRawPt = MatrixUtils.transformPoint(
+        _physicalCropRotationMatrix.clone()..invert(), physicalRotatedPt);
+
+    return physicalRawPt;
+  }
+
+  Rect _transformPhysicalImageRectToViewportRect(Rect physicalRawRect) {
+    // Rotate
+    final physicalRotatedRect =
+        MatrixUtils.transformRect(_physicalCropRotationMatrix, physicalRawRect);
+
+    // Crop
+    final physicalCroppedRotatedRect = physicalRotatedRect
+        .intersect(physicalRotatedCropRect)
+        .translate(-physicalRotatedCropRect.left, -physicalRotatedCropRect.top);
+
+    // Convert to the viewport pan/scale
+    final viewportRect = MatrixUtils.transformRect(
+        _viewportTransformationMatrix, physicalCroppedRotatedRect);
+
+    return viewportRect;
+  }
+
+  @action
+  void maybeSelectAnnotationAt(Offset viewportPoint) {
+    _selectedAnnotationObject = null;
+    _viewportOverlays.clear();
+    final physicalPt =
+        _transformViewportPointToPhysicalImagePoint(viewportPoint);
+    for (final annotation in _annotationObjects.reversed) {
+      final bounds = annotation.getBounds();
+      if (bounds.contains(physicalPt)) {
+        _selectedAnnotationObject = annotation;
+      } else {
+        // Search around the hit point in a 10x10 pixel area.
+        for (var x = -5.0; x <= 5.0; x++) {
+          for (var y = -5.0; y <= 5.0; y++) {
+            if (bounds.contains(physicalPt + Offset(x, y))) {
+              _selectedAnnotationObject = annotation;
+              break;
+            }
+          }
+        }
+      }
+
+      if (_selectedAnnotationObject != null) {
+        break;
+      }
+    }
+
+    if (_selectedAnnotationObject != null) {
+      final bounds = _selectedAnnotationObject!.getBounds();
+      debugPrint('Adding selected object control');
+      _viewportOverlays.add(_selectedObjectControl);
+    }
+  }
+}
+
+abstract class _AnnotationObject {
+  void paint(Canvas canvas);
+
+  Rect getBounds();
+}
+
+class _PathAnnotationObject extends _AnnotationObject {
+  _PathAnnotationObject(this.path, this._paint);
+
+  final Path path;
+  final Paint _paint;
+
+  @override
+  void paint(Canvas canvas) {
+    canvas.drawPath(path, _paint);
+  }
+
+  @override
+  ui.Rect getBounds() => path.getBounds();
+}
+
+class _SelectedObjectControl extends StatelessWidget {
+  const _SelectedObjectControl({Key? key, required this.model})
+      : super(key: key);
+
+  final EditorModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    return Observer(
+      builder: (context) {
+        if (model.selectedAnnotationObject != null) {
+          final bounds = model.selectedAnnotationObject!.getBounds();
+          final vpBounds =
+              model._transformPhysicalImageRectToViewportRect(bounds);
+          return Positioned(
+            left: vpBounds.left,
+            top: vpBounds.top,
+            child: Container(
+              color: Colors.green.withOpacity(0.5),
+              width: vpBounds.width,
+              height: vpBounds.height,
+            ),
+          );
+        } else {
+          return const SizedBox.shrink();
+        }
+      },
+    );
   }
 }
 
@@ -415,22 +613,6 @@ class _CropControl extends StatelessWidget {
                 child: controlSquare,
               ),
             ),
-            Positioned(
-                left: (cropRect.left + cropRect.width / 2) - (20 * 2 + 4),
-                top: (cropRect.top + cropRect.height) - 20,
-                child: Row(
-                  children: [
-                    FloatingActionButton.small(
-                      onPressed: () => model.applyCrop(),
-                      child: const Icon(Icons.done),
-                    ),
-                    const SizedBox(width: 8),
-                    FloatingActionButton.small(
-                      onPressed: () => model.cancelCrop(),
-                      child: const Icon(Icons.close),
-                    ),
-                  ],
-                )),
           ],
         );
       },
@@ -438,8 +620,8 @@ class _CropControl extends StatelessWidget {
   }
 }
 
-class _DrawControl extends StatelessWidget {
-  _DrawControl({Key? key, required this.model}) : super(key: key);
+class _FreeDrawControl extends StatelessWidget {
+  _FreeDrawControl({Key? key, required this.model}) : super(key: key);
 
   final EditorModel model;
   final _painterNotifier = ValueNotifier<bool>(false);
@@ -454,21 +636,21 @@ class _DrawControl extends StatelessWidget {
           child: GestureDetector(
             onPanStart: (start) {
               model._activePath ??= Path();
-              final pt =
-                  _transformViewportPointToFullImage(start.localPosition);
+              final pt = model._transformViewportPointToPhysicalImagePoint(
+                  start.localPosition);
               model._activePath!.moveTo(pt.dx, pt.dy);
               _repaintDrawing();
             },
             onPanEnd: (_) {},
             onPanUpdate: (update) {
               // debugPrint('onDrawUpdate');
-              final pt =
-                  _transformViewportPointToFullImage(update.localPosition);
+              final pt = model._transformViewportPointToPhysicalImagePoint(
+                  update.localPosition);
               model._activePath!.lineTo(pt.dx, pt.dy);
               _repaintDrawing();
             },
             child: CustomPaint(
-              // TODO I can't explain why, but this do-nothing painter is required to get the image to update.
+              // TODO I can't explain why, but this do-nothing painter is required to get the image to update while drawing.
               //  It may be because it repaints on the _painterNotifier change, but not sure.
               //  Also, just calling model.updateImage() in onPanUpdate doesn't cause the drawing to repaint until
               //  the pointer moves out of the window, or over a button.
@@ -481,21 +663,6 @@ class _DrawControl extends StatelessWidget {
   }
 
   void _repaintDrawing() => _painterNotifier.value = !_painterNotifier.value;
-
-  Offset _transformViewportPointToFullImage(Offset pt) {
-    // This matrix goes from viewport coordinates to full-image coordinates
-    final inverseViewportM =
-        model.viewportTransformationController.value.clone()..invert();
-    final physicalCroppedRotatedPt =
-        MatrixUtils.transformPoint(inverseViewportM, pt);
-    // Uncrop the point (untranslate by the rotated crop offset)
-    final physicalRotatedPt =
-        physicalCroppedRotatedPt + model.physicalRotatedCropRect.topLeft;
-    // Unrotate the point
-    final physicalRawPt = MatrixUtils.transformPoint(
-        model.physicalCropRotationMatrix.clone()..invert(), physicalRotatedPt);
-    return physicalRawPt;
-  }
 }
 
 class _StubPainter extends CustomPainter {
@@ -606,55 +773,15 @@ class _ImagePainter extends _ViewportPainter {
       Paint()..filterQuality = FilterQuality.medium,
     );
 
+    for (final annotation in _model._annotationObjects) {
+      annotation.paint(canvas);
+    }
+
     if (_model._activePath != null) {
-      final pathPaint = Paint()
-        ..color = Colors.green
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5
-        ..strokeCap = StrokeCap.round;
-      canvas.drawPath(_model._activePath!, pathPaint);
+      canvas.drawPath(_model._activePath!, _model._createPathPaint());
     }
   }
 
   @override
   bool shouldRepaint(covariant _ImagePainter oldDelegate) => false;
 }
-
-/*
-    image.image
-        .resolve(const ImageConfiguration())
-        .addListener(ImageStreamListener((info, _) async {
-      debugPrint('info: $info ');
-      final bytes = await captureFromWidget(
-        Stack(
-          children: [
-            image,
-            Center(child: Icon(Icons.ac_unit, color: Colors.green, size: 300))
-          ],
-        ),
-        pixelRatio: 1,
-        context: context,
-        targetSize:
-            Size(info.image.width.toDouble(), info.image.height.toDouble()),
-      );
-      debugPrint('bytes=${bytes.length}');
-
-      final internalImage = img.decodeImage(bytes);
-      final encodedBytes = img.encodeJpg(internalImage!, quality: 98);
-      // img.Image.fromBytes(info.image.width, info.image.height, bytes));
-      debugPrint('Encoded bytes = ${encodedBytes.length}');
-
-      final out = File('/home/dsyrstad/Downloads/Test-12MP-OUT.jpg');
-      out.writeAsBytesSync(encodedBytes, flush: true);
-      debugPrint('Wrote file');
-    }));
-
- */
-/*
-                Image.memory(
-                  _model.imageBytes,
-                  // "medium" provides better scaling results than "high" - see https://github.com/flutter/flutter/issues/79645#issuecomment-819920763.
-                  filterQuality: FilterQuality.medium,
-                ),
-
- */

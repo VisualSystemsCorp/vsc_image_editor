@@ -215,6 +215,80 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
+  late final _$_brushSizeAtom =
+      Atom(name: 'EditorModelBase._brushSize', context: context);
+
+  double get brushSize {
+    _$_brushSizeAtom.reportRead();
+    return super._brushSize;
+  }
+
+  @override
+  double get _brushSize => brushSize;
+
+  @override
+  set _brushSize(double value) {
+    _$_brushSizeAtom.reportWrite(value, super._brushSize, () {
+      super._brushSize = value;
+    });
+  }
+
+  late final _$_drawingColorAtom =
+      Atom(name: 'EditorModelBase._drawingColor', context: context);
+
+  Color get drawingColor {
+    _$_drawingColorAtom.reportRead();
+    return super._drawingColor;
+  }
+
+  @override
+  Color get _drawingColor => drawingColor;
+
+  @override
+  set _drawingColor(Color value) {
+    _$_drawingColorAtom.reportWrite(value, super._drawingColor, () {
+      super._drawingColor = value;
+    });
+  }
+
+  late final _$_selectedAnnotationObjectAtom =
+      Atom(name: 'EditorModelBase._selectedAnnotationObject', context: context);
+
+  _AnnotationObject? get selectedAnnotationObject {
+    _$_selectedAnnotationObjectAtom.reportRead();
+    return super._selectedAnnotationObject;
+  }
+
+  @override
+  _AnnotationObject? get _selectedAnnotationObject => selectedAnnotationObject;
+
+  @override
+  set _selectedAnnotationObject(_AnnotationObject? value) {
+    _$_selectedAnnotationObjectAtom
+        .reportWrite(value, super._selectedAnnotationObject, () {
+      super._selectedAnnotationObject = value;
+    });
+  }
+
+  late final _$_viewportTransformationMatrixAtom = Atom(
+      name: 'EditorModelBase._viewportTransformationMatrix', context: context);
+
+  Matrix4 get viewportTransformationMatrix {
+    _$_viewportTransformationMatrixAtom.reportRead();
+    return super._viewportTransformationMatrix;
+  }
+
+  @override
+  Matrix4 get _viewportTransformationMatrix => viewportTransformationMatrix;
+
+  @override
+  set _viewportTransformationMatrix(Matrix4 value) {
+    _$_viewportTransformationMatrixAtom
+        .reportWrite(value, super._viewportTransformationMatrix, () {
+      super._viewportTransformationMatrix = value;
+    });
+  }
+
   late final _$_initializeAsyncAction =
       AsyncAction('EditorModelBase._initialize', context: context);
 
@@ -381,11 +455,77 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
-  void startDraw() {
+  void startFreeDrawing() {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.startDraw');
+        name: 'EditorModelBase.startFreeDrawing');
     try {
-      return super.startDraw();
+      return super.startFreeDrawing();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void applyDrawing() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.applyDrawing');
+    try {
+      return super.applyDrawing();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void clearDrawing() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.clearDrawing');
+    try {
+      return super.clearDrawing();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void discardDrawing() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.discardDrawing');
+    try {
+      return super.discardDrawing();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setBrushSize(double size) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setBrushSize');
+    try {
+      return super.setBrushSize(size);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setDrawingColor(Color color) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setDrawingColor');
+    try {
+      return super.setDrawingColor(color);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void maybeSelectAnnotationAt(Offset viewportPoint) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.maybeSelectAnnotationAt');
+    try {
+      return super.maybeSelectAnnotationAt(viewportPoint);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
