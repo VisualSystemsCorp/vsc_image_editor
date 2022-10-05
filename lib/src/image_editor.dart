@@ -107,7 +107,6 @@ class VscImageEditorState extends State<VscImageEditor> {
                     constraints.maxWidth, constraints.maxHeight);
                 return Observer(builder: (context) {
                   // Need to listen to this to repaint image.
-                  _model.physicalCropRotationMatrix;
                   return Stack(
                     children: [
                       Positioned.fill(
@@ -119,9 +118,7 @@ class VscImageEditorState extends State<VscImageEditor> {
                           child: SizedBox(
                             width: _model.physicalRotatedCropRect.width,
                             height: _model.physicalRotatedCropRect.height,
-                            child: CustomPaint(
-                              painter: _model.imagePainter,
-                            ),
+                            child: _model.imagePainterWidget,
                           ),
                         ),
                       ),

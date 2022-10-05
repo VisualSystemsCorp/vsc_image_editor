@@ -36,7 +36,8 @@ abstract class EditorModelBase with Store {
 
   final TransformationController viewportTransformationController =
       TransformationController();
-  late final ImagePainter imagePainter;
+  late final CustomPainter _imagePainter;
+  late final Widget imagePainterWidget;
 
   @readonly
   ui.Image? _uiImage;
@@ -91,9 +92,16 @@ abstract class EditorModelBase with Store {
   @readonly
   bool _initialized = false;
 
+  Path? _activePath;
+
+  @readonly
+  bool _imagePainterTrigger = false;
+
   @action
   Future<void> _initialize(Uint8List imageBytes) async {
-    imagePainter = ImagePainter(this as EditorModel);
+    _imagePainter = ImagePainter(this as EditorModel);
+    imagePainterWidget = _ImagePainterWidget(model: this as EditorModel);
+
     viewportTransformationController.addListener(() {
       _zoomScale = viewportTransformationController.value.getMaxScaleOnAxis();
     });
@@ -115,6 +123,9 @@ abstract class EditorModelBase with Store {
   }
 
   @action
+  void updateImage() => _imagePainterTrigger = !_imagePainterTrigger;
+
+  @action
   void setViewportSize(double width, double height) {
     _viewport = ui.Rect.fromLTWH(_viewport.left, _viewport.top, width, height);
     // debugPrint('viewport updated $_viewport');
@@ -122,20 +133,27 @@ abstract class EditorModelBase with Store {
 
   @action
   void selectTool(Tool tool, {bool cancelCropping = true}) {
+    if (tool == _selectedTool) return;
+
     final lastTool = _selectedTool;
     _selectedTool = tool;
     if (cancelCropping && lastTool == Tool.crop && tool != Tool.crop) {
       cancelCrop(selectDefaultTool: false);
     }
 
+    _viewportOverlays.clear();
     switch (_selectedTool) {
       case Tool.select:
-        _viewportOverlays.clear();
         break;
 
       case Tool.crop:
         startCrop();
         break;
+
+      case Tool.draw:
+        startDraw();
+        break;
+
       default:
         break;
     }
@@ -318,10 +336,17 @@ abstract class EditorModelBase with Store {
   Future<ui.Image> getEditedUiImage() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    imagePainter.paint(canvas, Size.zero);
+    _imagePainter.paint(canvas, Size.zero);
     return recorder.endRecording().toImage(
         physicalRotatedCropRect.width.floor(),
         physicalRotatedCropRect.height.floor());
+  }
+
+  @action
+  void startDraw() {
+    _viewportOverlays
+      ..clear()
+      ..add(_DrawControl(model: this as EditorModel));
   }
 }
 
@@ -408,6 +433,38 @@ class _CropControl extends StatelessWidget {
   }
 }
 
+class _DrawControl extends StatelessWidget {
+  const _DrawControl({Key? key, required this.model}) : super(key: key);
+
+  final EditorModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    return Observer(
+      builder: (context) {
+        return GestureDetector(
+          onPanStart: (start) {
+            model._activePath ??= Path();
+            model._activePath!
+                .moveTo(start.globalPosition.dx, start.globalPosition.dy);
+            model.updateImage();
+            debugPrint('onPanStart');
+          },
+          onPanEnd: (_) {
+            debugPrint('onPanEnd');
+          },
+          onPanUpdate: (update) {
+            model._activePath!
+                .lineTo(update.globalPosition.dx, update.globalPosition.dy);
+            model.updateImage();
+            debugPrint('onPanUpdate');
+          },
+        );
+      },
+    );
+  }
+}
+
 class _CropScrimPainter extends CustomPainter {
   _CropScrimPainter(this.cropRect);
 
@@ -437,6 +494,24 @@ class _CropScrimPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+class _ImagePainterWidget extends StatelessWidget {
+  const _ImagePainterWidget({Key? key, required this.model}) : super(key: key);
+
+  final EditorModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    return Observer(
+      builder: (context) {
+        // Listen to the counter for updates
+        model.imagePainterTrigger;
+        debugPrint('updating');
+        return CustomPaint(painter: model._imagePainter);
+      },
+    );
+  }
+}
+
 class ImagePainter extends CustomPainter {
   ImagePainter(this._model);
 
@@ -444,6 +519,7 @@ class ImagePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    debugPrint('PAINT');
     canvas.save();
     canvas.translate(-_model.physicalRotatedCropRect.left,
         -_model.physicalRotatedCropRect.top);
@@ -454,6 +530,15 @@ class ImagePainter extends CustomPainter {
       Offset.zero,
       Paint()..filterQuality = FilterQuality.medium,
     );
+
+    if (_model._activePath != null) {
+      final pathPaint = Paint()
+        ..color = Colors.green
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(_model._activePath!, pathPaint);
+    }
 
     canvas.restore();
   }
