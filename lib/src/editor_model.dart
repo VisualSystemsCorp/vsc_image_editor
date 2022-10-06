@@ -122,7 +122,7 @@ abstract class EditorModelBase with Store {
   @readonly
   var _viewportTransformationMatrix = Matrix4.identity();
 
-  Path? _activePath;
+  final _workingAnnotationObjects = <_AnnotationObject>[];
 
   final _annotationObjects = <_AnnotationObject>[];
 
@@ -382,7 +382,7 @@ abstract class EditorModelBase with Store {
 
   @action
   void startFreeDrawing() {
-    _activePath = null;
+    _workingAnnotationObjects.clear();
     _viewportOverlays
       ..clear()
       ..add(_FreeDrawControl(model: this as EditorModel));
@@ -390,24 +390,25 @@ abstract class EditorModelBase with Store {
 
   @action
   void applyDrawing() {
-    if (_activePath != null && !_activePath!.getBounds().isEmpty) {
-      _annotationObjects.add(
-        _PathAnnotationObject(_activePath!, _createPathPaint()),
-      );
+    final nonEmptyObjects = _workingAnnotationObjects
+        .where((anno) => !anno.getBounds().isEmpty)
+        .toList(growable: false);
+    if (nonEmptyObjects.isNotEmpty) {
+      _annotationObjects.addAll(nonEmptyObjects);
     }
 
-    _activePath = null;
+    clearDrawing();
     selectTool(Tool.select);
   }
 
   @action
   void clearDrawing() {
-    _activePath = null;
+    _workingAnnotationObjects.clear();
   }
 
   @action
   void discardDrawing() {
-    _activePath = null;
+    clearDrawing();
     selectTool(Tool.select);
   }
 
@@ -494,7 +495,6 @@ abstract class EditorModelBase with Store {
     }
 
     if (_selectedAnnotationObject != null) {
-      final bounds = _selectedAnnotationObject!.getBounds();
       debugPrint('Adding selected object control');
       _viewportOverlays.add(_selectedObjectControl);
     }
@@ -539,10 +539,21 @@ class _SelectedObjectControl extends StatelessWidget {
           return Positioned(
             left: vpBounds.left,
             top: vpBounds.top,
-            child: Container(
-              color: Colors.green.withOpacity(0.5),
-              width: vpBounds.width,
-              height: vpBounds.height,
+            child: GestureDetector(
+              onPanStart: (p) {
+                debugPrint('SelectedObject onPanStart $p');
+              },
+              onPanUpdate: (p) {
+                debugPrint('SelectedObject onPanUpdate $p');
+              },
+              onPanEnd: (p) {
+                debugPrint('SelectedObject onPanEnd $p');
+              },
+              child: Container(
+                color: Colors.green.withOpacity(0.5),
+                width: vpBounds.width,
+                height: vpBounds.height,
+              ),
             ),
           );
         } else {
@@ -635,18 +646,24 @@ class _FreeDrawControl extends StatelessWidget {
           height: model.physicalRotatedCropRect.height,
           child: GestureDetector(
             onPanStart: (start) {
-              model._activePath ??= Path();
+              final path = Path();
+              final pathObj =
+                  _PathAnnotationObject(path, model._createPathPaint());
+              model._workingAnnotationObjects.add(pathObj);
               final pt = model._transformViewportPointToPhysicalImagePoint(
                   start.localPosition);
-              model._activePath!.moveTo(pt.dx, pt.dy);
+              path.moveTo(pt.dx, pt.dy);
               _repaintDrawing();
             },
             onPanEnd: (_) {},
             onPanUpdate: (update) {
               // debugPrint('onDrawUpdate');
+              final path = (model._workingAnnotationObjects.last
+                      as _PathAnnotationObject)
+                  .path;
               final pt = model._transformViewportPointToPhysicalImagePoint(
                   update.localPosition);
-              model._activePath!.lineTo(pt.dx, pt.dy);
+              path.lineTo(pt.dx, pt.dy);
               _repaintDrawing();
             },
             child: CustomPaint(
@@ -777,8 +794,8 @@ class _ImagePainter extends _ViewportPainter {
       annotation.paint(canvas);
     }
 
-    if (_model._activePath != null) {
-      canvas.drawPath(_model._activePath!, _model._createPathPaint());
+    for (final annotation in _model._workingAnnotationObjects) {
+      annotation.paint(canvas);
     }
   }
 
