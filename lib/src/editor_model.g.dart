@@ -233,6 +233,24 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
+  late final _$_fontSizeAtom =
+      Atom(name: 'EditorModelBase._fontSize', context: context);
+
+  double get fontSize {
+    _$_fontSizeAtom.reportRead();
+    return super._fontSize;
+  }
+
+  @override
+  double get _fontSize => fontSize;
+
+  @override
+  set _fontSize(double value) {
+    _$_fontSizeAtom.reportWrite(value, super._fontSize, () {
+      super._fontSize = value;
+    });
+  }
+
   late final _$_drawingColorAtom =
       Atom(name: 'EditorModelBase._drawingColor', context: context);
 
@@ -466,11 +484,11 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
-  void applyDrawing() {
+  void applyAnnotations() {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.applyDrawing');
+        name: 'EditorModelBase.applyAnnotations');
     try {
-      return super.applyDrawing();
+      return super.applyAnnotations();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
@@ -488,11 +506,11 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
-  void discardDrawing() {
+  void discardAnnotations() {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.discardDrawing');
+        name: 'EditorModelBase.discardAnnotations');
     try {
-      return super.discardDrawing();
+      return super.discardAnnotations();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
@@ -515,6 +533,72 @@ mixin _$EditorModel on EditorModelBase, Store {
         name: 'EditorModelBase.setDrawingColor');
     try {
       return super.setDrawingColor(color);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setFontSize(double size) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setFontSize');
+    try {
+      return super.setFontSize(size);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingOval() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingOval');
+    try {
+      return super.startDrawingOval();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingRect() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingRect');
+    try {
+      return super.startDrawingRect();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingLine() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingLine');
+    try {
+      return super.startDrawingLine();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingArrow() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingArrow');
+    try {
+      return super.startDrawingArrow();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingText() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingText');
+    try {
+      return super.startDrawingText();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }

@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -15,9 +14,11 @@ enum Tool {
   select(Icons.pan_tool_alt),
   crop(Icons.crop),
   draw(Icons.gesture),
-  text(Icons.text_fields),
+  text(Icons.title),
   oval(Icons.circle_outlined),
-  rectangle(Icons.rectangle_outlined);
+  rectangle(Icons.rectangle_outlined),
+  line(Icons.horizontal_rule),
+  arrow(Icons.north_east);
 
   const Tool(this.icon);
 
@@ -26,6 +27,7 @@ enum Tool {
 
 const _radians90Left = -pi / 2;
 const _radians90Right = pi / 2;
+const _arrowAngle = 25 * pi / 180; // 25 degrees
 
 const availableBrushSizes = [
   5.0,
@@ -34,6 +36,7 @@ const availableBrushSizes = [
   30.0,
   40.0,
 ];
+
 const availableColors = [
   Colors.yellow,
   Colors.red,
@@ -42,6 +45,14 @@ const availableColors = [
   Colors.purple,
   Colors.white,
   Colors.black,
+];
+
+const availableFontSizes = [
+  30.0,
+  45.0,
+  60.0,
+  75.0,
+  90.0,
 ];
 
 class EditorModel = EditorModelBase with _$EditorModel;
@@ -111,10 +122,13 @@ abstract class EditorModelBase with Store {
   bool _initialized = false;
 
   @readonly
-  var _brushSize = 10.0;
+  var _brushSize = availableBrushSizes[availableBrushSizes.length ~/ 2];
 
   @readonly
-  Color _drawingColor = Colors.yellow;
+  var _fontSize = availableFontSizes[availableFontSizes.length ~/ 2];
+
+  @readonly
+  Color _drawingColor = availableColors[0];
 
   @readonly
   _AnnotationObject? _selectedAnnotationObject;
@@ -191,7 +205,24 @@ abstract class EditorModelBase with Store {
         startFreeDrawing();
         break;
 
-      default:
+      case Tool.oval:
+        startDrawingOval();
+        break;
+
+      case Tool.rectangle:
+        startDrawingRect();
+        break;
+
+      case Tool.line:
+        startDrawingLine();
+        break;
+
+      case Tool.arrow:
+        startDrawingArrow();
+        break;
+
+      case Tool.text:
+        startDrawingText();
         break;
     }
   }
@@ -368,6 +399,7 @@ abstract class EditorModelBase with Store {
         _controlCropRect);
     _physicalNonRotatedCropRect = MatrixUtils.transformRect(
         _physicalCropRotationMatrix.clone()..invert(), physicalRotatedCropRect);
+    scaleToFitViewport();
     selectTool(Tool.select, cancelCropping: false);
   }
 
@@ -391,7 +423,7 @@ abstract class EditorModelBase with Store {
   }
 
   @action
-  void applyDrawing() {
+  void applyAnnotations() {
     final nonEmptyObjects = _workingAnnotationObjects
         .where((anno) => !anno.getBounds().isEmpty)
         .toList(growable: false);
@@ -411,7 +443,7 @@ abstract class EditorModelBase with Store {
   }
 
   @action
-  void discardDrawing() {
+  void discardAnnotations() {
     _workingAnnotationObjects.clear();
     selectTool(Tool.select);
   }
@@ -435,6 +467,52 @@ abstract class EditorModelBase with Store {
   void setDrawingColor(Color color) {
     _drawingColor = color;
     updateImage();
+  }
+
+  @action
+  void setFontSize(double size) {
+    _fontSize = size;
+    updateImage();
+  }
+
+  @action
+  void startDrawingOval() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_OvalDrawControl(model: this as EditorModel));
+  }
+
+  @action
+  void startDrawingRect() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_RectDrawControl(model: this as EditorModel));
+  }
+
+  @action
+  void startDrawingLine() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_LineDrawControl(model: this as EditorModel));
+  }
+
+  @action
+  void startDrawingArrow() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_LineDrawControl(model: this as EditorModel, isArrow: true));
+  }
+
+  @action
+  void startDrawingText() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_TextDrawControl(model: this as EditorModel));
   }
 
   Offset _transformViewportPointToPhysicalImagePoint(Offset pt) {
@@ -499,7 +577,6 @@ abstract class EditorModelBase with Store {
     }
 
     if (_selectedAnnotationObject != null) {
-      debugPrint('Adding selected object control');
       _viewportOverlays.add(_selectedObjectControl);
     }
   }
@@ -561,6 +638,60 @@ class _PathAnnotationObject extends _AnnotationObject {
   void transform(Matrix4 m) {
     path = path.transform(m.storage);
   }
+}
+
+class _TextAnnotationObject extends _AnnotationObject {
+  _TextAnnotationObject(
+    this.position,
+    String text,
+    double fontSize,
+    Color color,
+    double maxWidth,
+    this.rotation,
+  ) {
+    textPainter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            color: color,
+            fontSize: fontSize,
+            fontWeight: ui.FontWeight.bold,
+          ),
+        ),
+        textAlign: TextAlign.start,
+        textDirection: TextDirection.ltr)
+      ..layout(maxWidth: maxWidth);
+  }
+
+  final Offset position;
+  late final TextPainter textPainter;
+  final double rotation;
+  final _transformMatrix = Matrix4.identity();
+
+  @override
+  void paint(Canvas canvas) {
+    canvas.save();
+    canvas.transform(_transformMatrix.storage);
+    canvas.translate(position.dx, position.dy);
+    canvas.rotate(rotation);
+    canvas.translate(-position.dx, -position.dy);
+    textPainter.paint(canvas, position);
+    canvas.restore();
+  }
+
+  @override
+  ui.Rect getBounds() {
+    return MatrixUtils.transformRect(
+        _transformMatrix.clone()
+          ..translate(position.dx, position.dy)
+          ..rotateZ(rotation)
+          ..translate(-position.dx, -position.dy),
+        Rect.fromLTWH(
+            position.dx, position.dy, textPainter.width, textPainter.height));
+  }
+
+  @override
+  void transform(Matrix4 m) => _transformMatrix.multiply(m);
 }
 
 class _SelectedObjectControl extends StatelessWidget {
@@ -696,8 +827,8 @@ class _CropControl extends StatelessWidget {
   }
 }
 
-class _FreeDrawControl extends StatelessWidget {
-  _FreeDrawControl({Key? key, required this.model}) : super(key: key);
+abstract class _PathDrawControl extends StatelessWidget {
+  _PathDrawControl({Key? key, required this.model}) : super(key: key);
 
   final EditorModel model;
   final _painterNotifier = ValueNotifier<bool>(false);
@@ -710,27 +841,8 @@ class _FreeDrawControl extends StatelessWidget {
           width: model.physicalRotatedCropRect.width,
           height: model.physicalRotatedCropRect.height,
           child: GestureDetector(
-            onPanStart: (start) {
-              final path = Path();
-              final pathObj =
-                  _PathAnnotationObject(path, model._createPathPaint());
-              model._workingAnnotationObjects.add(pathObj);
-              final pt = model._transformViewportPointToPhysicalImagePoint(
-                  start.localPosition);
-              path.moveTo(pt.dx, pt.dy);
-              _repaintDrawing();
-            },
-            onPanEnd: (_) {},
-            onPanUpdate: (update) {
-              // debugPrint('onDrawUpdate');
-              final path = (model._workingAnnotationObjects.last
-                      as _PathAnnotationObject)
-                  .path;
-              final pt = model._transformViewportPointToPhysicalImagePoint(
-                  update.localPosition);
-              path.lineTo(pt.dx, pt.dy);
-              _repaintDrawing();
-            },
+            onPanStart: onDrawStart,
+            onPanUpdate: onDrawUpdate,
             child: CustomPaint(
               // TODO I can't explain why, but this do-nothing painter is required to get the image to update while drawing.
               //  It may be because it repaints on the _painterNotifier change, but not sure.
@@ -745,6 +857,203 @@ class _FreeDrawControl extends StatelessWidget {
   }
 
   void _repaintDrawing() => _painterNotifier.value = !_painterNotifier.value;
+
+  void onDrawStart(DragStartDetails start);
+
+  void onDrawUpdate(DragUpdateDetails update);
+}
+
+class _FreeDrawControl extends _PathDrawControl {
+  _FreeDrawControl({Key? key, required EditorModel model})
+      : super(key: key, model: model);
+
+  @override
+  void onDrawStart(DragStartDetails start) {
+    final path = Path();
+    final pathObj = _PathAnnotationObject(path, model._createPathPaint());
+    model._workingAnnotationObjects.add(pathObj);
+    final pt =
+        model._transformViewportPointToPhysicalImagePoint(start.localPosition);
+    path.moveTo(pt.dx, pt.dy);
+    _repaintDrawing();
+  }
+
+  @override
+  void onDrawUpdate(DragUpdateDetails update) {
+    final path =
+        (model._workingAnnotationObjects.last as _PathAnnotationObject).path;
+    final pt =
+        model._transformViewportPointToPhysicalImagePoint(update.localPosition);
+    path.lineTo(pt.dx, pt.dy);
+    _repaintDrawing();
+  }
+}
+
+class _OvalDrawControl extends _PathDrawControl {
+  _OvalDrawControl({Key? key, required EditorModel model})
+      : super(key: key, model: model);
+
+  final _startPt = _ValueHolder(Offset.zero);
+
+  @override
+  void onDrawStart(DragStartDetails start) {
+    model._workingAnnotationObjects
+        .add(_PathAnnotationObject(Path(), model._createPathPaint()));
+    _startPt.value =
+        model._transformViewportPointToPhysicalImagePoint(start.localPosition);
+  }
+
+  @override
+  void onDrawUpdate(DragUpdateDetails update) {
+    final pathObj =
+        model._workingAnnotationObjects.last as _PathAnnotationObject;
+    final lowerRightPt =
+        model._transformViewportPointToPhysicalImagePoint(update.localPosition);
+    pathObj.path = Path()
+      ..addOval(Rect.fromLTRB(_startPt.value.dx, _startPt.value.dy,
+          lowerRightPt.dx, lowerRightPt.dy));
+    _repaintDrawing();
+  }
+}
+
+class _RectDrawControl extends _PathDrawControl {
+  _RectDrawControl({Key? key, required EditorModel model})
+      : super(key: key, model: model);
+
+  final _startPt = _ValueHolder(Offset.zero);
+
+  @override
+  void onDrawStart(DragStartDetails start) {
+    model._workingAnnotationObjects
+        .add(_PathAnnotationObject(Path(), model._createPathPaint()));
+    _startPt.value =
+        model._transformViewportPointToPhysicalImagePoint(start.localPosition);
+  }
+
+  @override
+  void onDrawUpdate(DragUpdateDetails update) {
+    final pathObj =
+        model._workingAnnotationObjects.last as _PathAnnotationObject;
+    final lowerRightPt =
+        model._transformViewportPointToPhysicalImagePoint(update.localPosition);
+    pathObj.path = Path()
+      ..addRect(Rect.fromLTRB(_startPt.value.dx, _startPt.value.dy,
+          lowerRightPt.dx, lowerRightPt.dy));
+    _repaintDrawing();
+  }
+}
+
+class _LineDrawControl extends _PathDrawControl {
+  _LineDrawControl({Key? key, required EditorModel model, this.isArrow = false})
+      : super(key: key, model: model);
+
+  final _startPt = _ValueHolder(Offset.zero);
+  final bool isArrow;
+
+  @override
+  void onDrawStart(DragStartDetails start) {
+    model._workingAnnotationObjects
+        .add(_PathAnnotationObject(Path(), model._createPathPaint()));
+    _startPt.value =
+        model._transformViewportPointToPhysicalImagePoint(start.localPosition);
+  }
+
+  @override
+  void onDrawUpdate(DragUpdateDetails update) {
+    final pathObj =
+        model._workingAnnotationObjects.last as _PathAnnotationObject;
+    final endPt =
+        model._transformViewportPointToPhysicalImagePoint(update.localPosition);
+    pathObj.path = Path()
+      ..moveTo(_startPt.value.dx, _startPt.value.dy)
+      ..lineTo(endPt.dx, endPt.dy);
+    if (isArrow) {
+      final delta = endPt - _startPt.value;
+      final angle = atan2(delta.dy, delta.dx);
+      final arrowSize = 15.0 * (model.brushSize / 5.0);
+      pathObj.path
+        ..moveTo(endPt.dx - arrowSize * cos(angle - _arrowAngle),
+            endPt.dy - arrowSize * sin(angle - _arrowAngle))
+        ..lineTo(endPt.dx, endPt.dy)
+        ..lineTo(endPt.dx - arrowSize * cos(angle + _arrowAngle),
+            endPt.dy - arrowSize * sin(angle + _arrowAngle))
+        ..close();
+    }
+
+    _repaintDrawing();
+  }
+}
+
+class _TextDrawControl extends StatelessWidget {
+  const _TextDrawControl({Key? key, required this.model}) : super(key: key);
+
+  final EditorModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    return Observer(
+      builder: (context) {
+        return SizedBox(
+          width: model.physicalRotatedCropRect.width,
+          height: model.physicalRotatedCropRect.height,
+          child: GestureDetector(
+            onTapDown: (tapDown) => _promptForText(context, tapDown),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _promptForText(
+      BuildContext context, TapDownDetails tapDown) async {
+    final text = _ValueHolder('');
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Enter text'),
+          content: SizedBox(
+            width: 360,
+            child: TextField(
+              autofocus: true,
+              onChanged: (value) => text.value = value,
+              maxLines: 3,
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.pop(context, null),
+            ),
+            TextButton(
+              child: const Text('Ok'),
+              onPressed: () => Navigator.pop(context, text.value),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null) {
+      final phyPt = model
+          ._transformViewportPointToPhysicalImagePoint(tapDown.localPosition);
+      final rotationQ = Quaternion.identity();
+      model.physicalCropRotationMatrix
+          .decompose(Vector3.zero(), rotationQ, Vector3.zero());
+      // Radians is the same value when rotated 90 or 270, so you have to multiple by the Z sign.
+      final rotation = rotationQ.radians * -(rotationQ.z.sign);
+
+      model._workingAnnotationObjects.add(_TextAnnotationObject(
+        phyPt,
+        result,
+        model.fontSize,
+        model.drawingColor,
+        model.physicalRotatedCropRect.width,
+        rotation,
+      ));
+      model.updateImage();
+    }
+  }
 }
 
 class _StubPainter extends CustomPainter {
@@ -866,4 +1175,10 @@ class _ImagePainter extends _ViewportPainter {
 
   @override
   bool shouldRepaint(covariant _ImagePainter oldDelegate) => false;
+}
+
+class _ValueHolder<T> {
+  _ValueHolder(this.value);
+
+  T value;
 }
