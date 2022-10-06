@@ -154,8 +154,8 @@ class VscImageEditorState extends State<VscImageEditor> {
         ),
         const SizedBox(width: 24),
         FloatingActionButton.small(
-          onPressed: () => _model.clearDrawing(),
-          tooltip: 'Clear drawing',
+          onPressed: () => _model.undoLastWorkingAnnotation(),
+          tooltip: 'Undo',
           child: const Icon(Icons.undo),
         ),
         const SizedBox(width: 24),

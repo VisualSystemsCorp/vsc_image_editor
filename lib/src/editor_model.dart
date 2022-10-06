@@ -375,9 +375,11 @@ abstract class EditorModelBase with Store {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     _imagePainter.paint(canvas, Size.zero);
-    return recorder.endRecording().toImage(
-        physicalRotatedCropRect.width.floor(),
+    final picture = recorder.endRecording();
+    final image = picture.toImage(physicalRotatedCropRect.width.floor(),
         physicalRotatedCropRect.height.floor());
+    picture.dispose();
+    return image;
   }
 
   @action
@@ -397,18 +399,20 @@ abstract class EditorModelBase with Store {
       _annotationObjects.addAll(nonEmptyObjects);
     }
 
-    clearDrawing();
+    _workingAnnotationObjects.clear();
     selectTool(Tool.select);
   }
 
   @action
-  void clearDrawing() {
-    _workingAnnotationObjects.clear();
+  void undoLastWorkingAnnotation() {
+    if (_workingAnnotationObjects.isNotEmpty) {
+      _workingAnnotationObjects.removeLast();
+    }
   }
 
   @action
   void discardDrawing() {
-    clearDrawing();
+    _workingAnnotationObjects.clear();
     selectTool(Tool.select);
   }
 
@@ -499,18 +503,50 @@ abstract class EditorModelBase with Store {
       _viewportOverlays.add(_selectedObjectControl);
     }
   }
+
+  @action
+  void moveSelectedObject(Offset viewportDelta) {
+    final selectedObject = _selectedAnnotationObject;
+    if (selectedObject == null) return;
+
+    final phyCurrTopLeft = selectedObject.getBounds().topLeft;
+    final vpCurrTopLeft = _transformPhysicalImageRectToViewportRect(
+            Rect.fromLTWH(phyCurrTopLeft.dx, phyCurrTopLeft.dy, 1, 1))
+        .topLeft;
+    final phyNewTopLeft = _transformViewportPointToPhysicalImagePoint(
+        vpCurrTopLeft + viewportDelta);
+    final phyDelta = phyNewTopLeft - phyCurrTopLeft;
+    // debugPrint(
+    //     'phyDelta=$phyDelta phyCurrTopLeft=$phyCurrTopLeft vpCurrTopLeft=$vpCurrTopLeft');
+    selectedObject
+        .transform(Matrix4.translationValues(phyDelta.dx, phyDelta.dy, 0.0));
+    // Cause the selector to update
+    _selectedAnnotationObject = selectedObject;
+    updateImage();
+  }
+
+  @action
+  void removeSelectedObject() {
+    final selectedObject = _selectedAnnotationObject;
+    if (selectedObject == null) return;
+
+    _annotationObjects.remove(_selectedAnnotationObject);
+    _selectedAnnotationObject = null;
+  }
 }
 
 abstract class _AnnotationObject {
   void paint(Canvas canvas);
 
   Rect getBounds();
+
+  void transform(Matrix4 m);
 }
 
 class _PathAnnotationObject extends _AnnotationObject {
   _PathAnnotationObject(this.path, this._paint);
 
-  final Path path;
+  Path path;
   final Paint _paint;
 
   @override
@@ -520,6 +556,11 @@ class _PathAnnotationObject extends _AnnotationObject {
 
   @override
   ui.Rect getBounds() => path.getBounds();
+
+  @override
+  void transform(Matrix4 m) {
+    path = path.transform(m.storage);
+  }
 }
 
 class _SelectedObjectControl extends StatelessWidget {
@@ -537,22 +578,46 @@ class _SelectedObjectControl extends StatelessWidget {
           final vpBounds =
               model._transformPhysicalImageRectToViewportRect(bounds);
           return Positioned(
-            left: vpBounds.left,
-            top: vpBounds.top,
+            left: vpBounds.left - 22,
+            top: vpBounds.top - 22,
             child: GestureDetector(
-              onPanStart: (p) {
-                debugPrint('SelectedObject onPanStart $p');
-              },
               onPanUpdate: (p) {
-                debugPrint('SelectedObject onPanUpdate $p');
+                model.moveSelectedObject(p.delta);
               },
-              onPanEnd: (p) {
-                debugPrint('SelectedObject onPanEnd $p');
-              },
-              child: Container(
-                color: Colors.green.withOpacity(0.5),
-                width: vpBounds.width,
-                height: vpBounds.height,
+              child: Stack(
+                children: [
+                  Positioned(
+                    child: Container(
+                      margin: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(width: 3, color: Colors.white),
+                        boxShadow: const [
+                          BoxShadow(blurRadius: 10, blurStyle: BlurStyle.outer),
+                        ],
+                      ),
+                      width: vpBounds.width + 28,
+                      height: vpBounds.height + 28,
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    child: InkWell(
+                      onTap: () => model.removeSelectedObject(),
+                      child: Tooltip(
+                        message: 'Remove',
+                        child: Container(
+                          decoration: const BoxDecoration(
+                              color: Colors.white, shape: BoxShape.circle),
+                          child: const Icon(
+                            Icons.clear,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           );

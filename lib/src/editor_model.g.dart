@@ -477,11 +477,11 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
-  void clearDrawing() {
+  void undoLastWorkingAnnotation() {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.clearDrawing');
+        name: 'EditorModelBase.undoLastWorkingAnnotation');
     try {
-      return super.clearDrawing();
+      return super.undoLastWorkingAnnotation();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
@@ -526,6 +526,28 @@ mixin _$EditorModel on EditorModelBase, Store {
         name: 'EditorModelBase.maybeSelectAnnotationAt');
     try {
       return super.maybeSelectAnnotationAt(viewportPoint);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void moveSelectedObject(Offset viewportDelta) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.moveSelectedObject');
+    try {
+      return super.moveSelectedObject(viewportDelta);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void removeSelectedObject() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.removeSelectedObject');
+    try {
+      return super.removeSelectedObject();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
