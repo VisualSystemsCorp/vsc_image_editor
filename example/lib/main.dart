@@ -37,6 +37,8 @@ class _Example extends StatefulWidget {
 class _ExampleState extends State<_Example> {
   Uint8List? _imageBytes;
   VscImageEditorController controller = VscImageEditorController();
+  static const _cropRatios = [null, 1.0, 1.7778];
+  final _cropRatioSelections = [true, false, false];
 
   @override
   void initState() {
@@ -52,24 +54,51 @@ class _ExampleState extends State<_Example> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final buttonTextStyle = TextStyle(
+      color: colorScheme.onPrimary,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('VscImageEditor Example'),
         actions: [
+          ToggleButtons(
+            isSelected: _cropRatioSelections,
+            onPressed: (index) {
+              _cropRatioSelections.setAll(0, [false, false, false]);
+              _cropRatioSelections[index] = true;
+              setState(() {});
+            },
+            selectedBorderColor: colorScheme.onPrimary,
+            children: [
+              Text('Free', style: buttonTextStyle),
+              Text('1:1', style: buttonTextStyle),
+              Text('16:9', style: buttonTextStyle),
+            ],
+          ),
+          const SizedBox(width: 8),
+          // Builder is needed to get the correct context for _share().
           Builder(
             builder: (context) {
-              return ElevatedButton(
+              return TextButton(
                 onPressed: () => _share(context),
-                child: const Text('Share'),
+                child: Text(
+                  'Share',
+                  style: buttonTextStyle,
+                ),
               );
             },
           ),
           Padding(
             // Avoid the "Debug" banner
             padding: const EdgeInsets.fromLTRB(0, 0, 54, 0),
-            child: ElevatedButton(
+            child: TextButton(
               onPressed: _save,
-              child: const Text('Save'),
+              child: Text(
+                'Save',
+                style: buttonTextStyle,
+              ),
             ),
           ),
         ],
@@ -80,6 +109,8 @@ class _ExampleState extends State<_Example> {
           : VscImageEditor(
               imageBytes: _imageBytes!,
               controller: controller,
+              fixedCropRatio: _cropRatios[
+                  _cropRatioSelections.indexWhere((element) => element)],
             ),
     );
   }

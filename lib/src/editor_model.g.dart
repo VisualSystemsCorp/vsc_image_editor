@@ -69,6 +69,24 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
+  late final _$_fixedCropRatioAtom =
+      Atom(name: 'EditorModelBase._fixedCropRatio', context: context);
+
+  double? get fixedCropRatio {
+    _$_fixedCropRatioAtom.reportRead();
+    return super._fixedCropRatio;
+  }
+
+  @override
+  double? get _fixedCropRatio => fixedCropRatio;
+
+  @override
+  set _fixedCropRatio(double? value) {
+    _$_fixedCropRatioAtom.reportWrite(value, super._fixedCropRatio, () {
+      super._fixedCropRatio = value;
+    });
+  }
+
   late final _$_physicalNonRotatedCropRectAtom = Atom(
       name: 'EditorModelBase._physicalNonRotatedCropRect', context: context);
 
@@ -311,8 +329,9 @@ mixin _$EditorModel on EditorModelBase, Store {
       AsyncAction('EditorModelBase._initialize', context: context);
 
   @override
-  Future<void> _initialize(Uint8List imageBytes) {
-    return _$_initializeAsyncAction.run(() => super._initialize(imageBytes));
+  Future<void> _initialize(Uint8List imageBytes, double? fixedCropRatio) {
+    return _$_initializeAsyncAction
+        .run(() => super._initialize(imageBytes, fixedCropRatio));
   }
 
   late final _$EditorModelBaseActionController =
@@ -335,6 +354,17 @@ mixin _$EditorModel on EditorModelBase, Store {
         name: 'EditorModelBase.selectTool');
     try {
       return super.selectTool(tool, cancelCropping: cancelCropping);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setFixedCropRatio(double? ratio) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setFixedCropRatio');
+    try {
+      return super.setFixedCropRatio(ratio);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
@@ -418,44 +448,55 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
-  void updateCropLeftTop(DragUpdateDetails details) {
+  void dragCrop(DragUpdateDetails details) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateCropLeftTop');
+        name: 'EditorModelBase.dragCrop');
     try {
-      return super.updateCropLeftTop(details);
+      return super.dragCrop(details);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
   }
 
   @override
-  void updateCropLeftBottom(DragUpdateDetails details) {
+  void updateCropTopLeft(DragUpdateDetails details) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateCropLeftBottom');
+        name: 'EditorModelBase.updateCropTopLeft');
     try {
-      return super.updateCropLeftBottom(details);
+      return super.updateCropTopLeft(details);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
   }
 
   @override
-  void updateCropRightTop(DragUpdateDetails details) {
+  void updateCropBottomLeft(DragUpdateDetails details) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateCropRightTop');
+        name: 'EditorModelBase.updateCropBottomLeft');
     try {
-      return super.updateCropRightTop(details);
+      return super.updateCropBottomLeft(details);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
   }
 
   @override
-  void updateCropRightBottom(DragUpdateDetails details) {
+  void updateCropTopRight(DragUpdateDetails details) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateCropRightBottom');
+        name: 'EditorModelBase.updateCropTopRight');
     try {
-      return super.updateCropRightBottom(details);
+      return super.updateCropTopRight(details);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void updateCropBottomRight(DragUpdateDetails details) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.updateCropBottomRight');
+    try {
+      return super.updateCropBottomRight(details);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }

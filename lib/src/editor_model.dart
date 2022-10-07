@@ -55,11 +55,16 @@ const availableFontSizes = [
   90.0,
 ];
 
+enum _Corner { topLeft, topRight, bottomLeft, bottomRight }
+
 class EditorModel = EditorModelBase with _$EditorModel;
 
 abstract class EditorModelBase with Store {
-  EditorModelBase(Uint8List imageBytes) {
-    _initialize(imageBytes);
+  EditorModelBase(
+    Uint8List imageBytes, {
+    double? fixedCropRatio,
+  }) {
+    _initialize(imageBytes, fixedCropRatio);
   }
 
   final TransformationController viewportTransformationController =
@@ -76,6 +81,9 @@ abstract class EditorModelBase with Store {
 
   @readonly
   double _fullImageNonRotatedPhysicalHeight = 0;
+
+  @readonly
+  double? _fixedCropRatio;
 
   ui.Rect get fullImageRotatedPhysicalRect => MatrixUtils.transformRect(
       _physicalCropRotationMatrix,
@@ -143,10 +151,11 @@ abstract class EditorModelBase with Store {
   final _imagePainterNotifier = ValueNotifier<bool>(false);
 
   @action
-  Future<void> _initialize(Uint8List imageBytes) async {
+  Future<void> _initialize(Uint8List imageBytes, double? fixedCropRatio) async {
     _imagePainter = _ImagePainter(this as EditorModel, _imagePainterNotifier);
     imagePainterWidget = _ImagePainterWidget(model: this as EditorModel);
     _selectedObjectControl = _SelectedObjectControl(model: this as EditorModel);
+    _fixedCropRatio = fixedCropRatio;
 
     viewportTransformationController.addListener(() {
       _zoomScale = viewportTransformationController.value.getMaxScaleOnAxis();
@@ -227,6 +236,14 @@ abstract class EditorModelBase with Store {
     }
   }
 
+  @action
+  void setFixedCropRatio(double? ratio) {
+    if (ratio != _fixedCropRatio) {
+      _fixedCropRatio = ratio;
+      _updateCropRect(_controlCropRect, _Corner.bottomRight);
+    }
+  }
+
   /// Sets the new scale, which also resets the pan (translation).
   @action
   void setScale(double scale) {
@@ -293,8 +310,10 @@ abstract class EditorModelBase with Store {
 
     final insetX = _viewport.width * 0.10;
     final insetY = _viewport.height * 0.10;
-    _updateCropRect(ui.Rect.fromLTRB(
-        insetX, insetY, _viewport.width - insetX, _viewport.height - insetY));
+    _updateCropRect(
+        ui.Rect.fromLTRB(insetX, insetY, _viewport.width - insetX,
+            _viewport.height - insetY),
+        _Corner.bottomRight);
 
     _viewportOverlays
       ..clear()
@@ -318,30 +337,54 @@ abstract class EditorModelBase with Store {
   }
 
   @action
-  void updateCropLeftTop(DragUpdateDetails details) {
+  void dragCrop(DragUpdateDetails details) {
+    final newRect = _controlCropRect.shift(details.delta);
+    final imageViewportRect = MatrixUtils.transformRect(
+        viewportTransformationController.value, fullImageRotatedPhysicalRect);
+    if (imageViewportRect.intersect(newRect) != newRect) {
+      // Proposed rect exceeds bounds, don't move it
+      return;
+    }
+
+    _controlCropRect = newRect;
+  }
+
+  @action
+  void updateCropTopLeft(DragUpdateDetails details) {
     final newRect = ui.Rect.fromLTRB(
         _controlCropRect.left + details.delta.dx,
         _controlCropRect.top + details.delta.dy,
         _controlCropRect.right,
         _controlCropRect.bottom);
-    _updateCropRect(newRect);
+    _updateCropRect(newRect, _Corner.topLeft);
   }
 
-  void _updateCropRect(ui.Rect newRect) {
+  void _updateCropRect(ui.Rect newRect, _Corner adjustingCorner) {
     var left = newRect.left;
     var right = newRect.right;
     var top = newRect.top;
     var bottom = newRect.bottom;
     if (left > right) {
-      left = right;
+      if (adjustingCorner == _Corner.bottomRight ||
+          adjustingCorner == _Corner.topRight) {
+        right = left;
+      } else {
+        left = right;
+      }
     }
     if (top > bottom) {
-      top = bottom;
+      if (adjustingCorner == _Corner.bottomRight ||
+          adjustingCorner == _Corner.bottomLeft) {
+        bottom = top;
+      } else {
+        top = bottom;
+      }
     }
 
     // Cannot be out of bounds of image.
     final imageViewportRect = MatrixUtils.transformRect(
         viewportTransformationController.value, fullImageRotatedPhysicalRect);
+
     if (left < imageViewportRect.left) {
       left = imageViewportRect.left;
     }
@@ -358,37 +401,75 @@ abstract class EditorModelBase with Store {
       bottom = imageViewportRect.bottom;
     }
 
+    final cropRatio = _fixedCropRatio;
+    if (cropRatio != null) {
+      var width = right - left;
+      var height = bottom - top;
+      final targetHeight = width / cropRatio;
+      if ((height - targetHeight).abs() > 0.0001) {
+        if (targetHeight > imageViewportRect.height) {
+          // Adjust width because height would become too tall.
+          final targetWidth = height * cropRatio;
+          if (adjustingCorner == _Corner.bottomRight ||
+              adjustingCorner == _Corner.topRight) {
+            // Adjust right
+            right = left + targetWidth;
+          } else {
+            //
+            // _Corner.bottomLeft || _Corner.topLeft: Adjust left
+            left = right - targetWidth;
+          }
+        } else {
+          // Adjust height
+          if (adjustingCorner == _Corner.bottomRight ||
+              adjustingCorner == _Corner.bottomLeft) {
+            // Adjust bottom
+            bottom = top + targetHeight;
+          } else {
+            // _Corner.topRight || _Corner.topLeft: Adjust top
+            top = bottom - targetHeight;
+          }
+
+          final proposedRect = Rect.fromLTRB(left, top, right, bottom);
+          if (imageViewportRect.intersect(proposedRect) != proposedRect) {
+            // Proposed rect exceeds bounds, don't change crop
+            return;
+          }
+        }
+      }
+    }
+
     _controlCropRect = ui.Rect.fromLTRB(left, top, right, bottom);
   }
 
   @action
-  void updateCropLeftBottom(DragUpdateDetails details) {
+  void updateCropBottomLeft(DragUpdateDetails details) {
     final newRect = ui.Rect.fromLTRB(
         _controlCropRect.left + details.delta.dx,
         _controlCropRect.top,
         _controlCropRect.right,
         _controlCropRect.bottom + details.delta.dy);
-    _updateCropRect(newRect);
+    _updateCropRect(newRect, _Corner.bottomLeft);
   }
 
   @action
-  void updateCropRightTop(DragUpdateDetails details) {
+  void updateCropTopRight(DragUpdateDetails details) {
     final newRect = ui.Rect.fromLTRB(
         _controlCropRect.left,
         _controlCropRect.top + details.delta.dy,
         _controlCropRect.right + details.delta.dx,
         _controlCropRect.bottom);
-    _updateCropRect(newRect);
+    _updateCropRect(newRect, _Corner.topRight);
   }
 
   @action
-  void updateCropRightBottom(DragUpdateDetails details) {
+  void updateCropBottomRight(DragUpdateDetails details) {
     final newRect = ui.Rect.fromLTRB(
         _controlCropRect.left,
         _controlCropRect.top,
         _controlCropRect.right + details.delta.dx,
         _controlCropRect.bottom + details.delta.dy);
-    _updateCropRect(newRect);
+    _updateCropRect(newRect, _Corner.bottomRight);
   }
 
   @action
@@ -770,10 +851,14 @@ class _CropControl extends StatelessWidget {
     return Observer(
       builder: (context) {
         final cropRect = model.controlCropRect;
-        const controlWH = 15.0;
+        const controlWH = 20.0;
         const halfControlWH = controlWH / 2;
-        final controlSquare =
-            Container(color: Colors.white, width: controlWH, height: controlWH);
+        final controlCorner = Container(
+          decoration:
+              const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          width: controlWH,
+          height: controlWH,
+        );
         return Stack(
           children: [
             // scrim
@@ -784,13 +869,23 @@ class _CropControl extends StatelessWidget {
               bottom: 0,
               child: CustomPaint(painter: _CropScrimPainter(cropRect)),
             ),
+            // Inside crop can be dragged
+            Positioned(
+              left: cropRect.left,
+              top: cropRect.top,
+              right: model.viewport.right - cropRect.right,
+              bottom: model.viewport.bottom - cropRect.bottom,
+              child: GestureDetector(
+                onPanUpdate: (details) => model.dragCrop(details),
+              ),
+            ),
             // upper left
             Positioned(
               left: cropRect.left - halfControlWH,
               top: cropRect.top - halfControlWH,
               child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropLeftTop(details),
-                child: controlSquare,
+                onPanUpdate: (details) => model.updateCropTopLeft(details),
+                child: controlCorner,
               ),
             ),
             // upper right
@@ -798,8 +893,8 @@ class _CropControl extends StatelessWidget {
               left: cropRect.right - halfControlWH,
               top: cropRect.top - halfControlWH,
               child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropRightTop(details),
-                child: controlSquare,
+                onPanUpdate: (details) => model.updateCropTopRight(details),
+                child: controlCorner,
               ),
             ),
             // lower left
@@ -807,8 +902,8 @@ class _CropControl extends StatelessWidget {
               left: cropRect.left - halfControlWH,
               bottom: (model.viewport.bottom - cropRect.bottom) - halfControlWH,
               child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropLeftBottom(details),
-                child: controlSquare,
+                onPanUpdate: (details) => model.updateCropBottomLeft(details),
+                child: controlCorner,
               ),
             ),
             // lower right
@@ -816,8 +911,8 @@ class _CropControl extends StatelessWidget {
               left: cropRect.right - halfControlWH,
               bottom: (model.viewport.bottom - cropRect.bottom) - halfControlWH,
               child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropRightBottom(details),
-                child: controlSquare,
+                onPanUpdate: (details) => model.updateCropBottomRight(details),
+                child: controlCorner,
               ),
             ),
           ],

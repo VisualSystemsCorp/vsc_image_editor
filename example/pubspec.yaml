@@ -14,7 +14,7 @@ dependencies:
   vsc_image_editor:
     path: ../
   image: ^3.2.0
-  share_plus: ^4.5.2
+  share_plus: ^4.5.3
   cross_file: ^0.3.3+2
 
 dev_dependencies:

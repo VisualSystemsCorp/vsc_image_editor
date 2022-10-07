@@ -17,15 +17,25 @@ const _defaultToolNames = <Tool, String>{
   Tool.arrow: 'Arrow',
 };
 
+/// A widget which allows the user to crop, rotate, and annotate an image.
 class VscImageEditor extends StatefulWidget {
   const VscImageEditor({
     Key? key,
     required this.imageBytes,
     this.controller,
+    this.fixedCropRatio,
   }) : super(key: key);
 
+  /// The original unedited image.
   final Uint8List imageBytes;
+
+  /// A controller that can be used to retrieve the edited image.
   final VscImageEditorController? controller;
+
+  /// If non-null, cropping will be restricted to this crop ratio. For example, a
+  /// value of 1.0 will restrict the crop to a 1:1 ratio. This is a ratio of width
+  /// to height, so a 16:9 ratio = 1.7778.
+  final double? fixedCropRatio;
 
   @override
   State<VscImageEditor> createState() => VscImageEditorState();
@@ -38,9 +48,17 @@ class VscImageEditorState extends State<VscImageEditor> {
 
   @override
   void initState() {
+    // TODO: implement initState
     super.initState();
-    _model = EditorModel(widget.imageBytes);
+    _model =
+        EditorModel(widget.imageBytes, fixedCropRatio: widget.fixedCropRatio);
     widget.controller?.model = _model;
+  }
+
+  @override
+  void didUpdateWidget(covariant VscImageEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _model.setFixedCropRatio(widget.fixedCropRatio);
   }
 
   @override
@@ -56,6 +74,7 @@ class VscImageEditorState extends State<VscImageEditor> {
         return const Center(child: CircularProgressIndicator());
       }
 
+      _model.fixedCropRatio; // Watch this
       final theme = Theme.of(context);
       return BottomNavigationBarTheme(
         data: theme.bottomNavigationBarTheme,
