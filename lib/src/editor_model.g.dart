@@ -87,6 +87,24 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
+  late final _$_showCropCircleAtom =
+      Atom(name: 'EditorModelBase._showCropCircle', context: context);
+
+  bool get showCropCircle {
+    _$_showCropCircleAtom.reportRead();
+    return super._showCropCircle;
+  }
+
+  @override
+  bool get _showCropCircle => showCropCircle;
+
+  @override
+  set _showCropCircle(bool value) {
+    _$_showCropCircleAtom.reportWrite(value, super._showCropCircle, () {
+      super._showCropCircle = value;
+    });
+  }
+
   late final _$_physicalNonRotatedCropRectAtom = Atom(
       name: 'EditorModelBase._physicalNonRotatedCropRect', context: context);
 
@@ -329,9 +347,8 @@ mixin _$EditorModel on EditorModelBase, Store {
       AsyncAction('EditorModelBase._initialize', context: context);
 
   @override
-  Future<void> _initialize(Uint8List imageBytes, double? fixedCropRatio) {
-    return _$_initializeAsyncAction
-        .run(() => super._initialize(imageBytes, fixedCropRatio));
+  Future<void> _initialize(Uint8List imageBytes) {
+    return _$_initializeAsyncAction.run(() => super._initialize(imageBytes));
   }
 
   late final _$EditorModelBaseActionController =
@@ -365,6 +382,17 @@ mixin _$EditorModel on EditorModelBase, Store {
         name: 'EditorModelBase.setFixedCropRatio');
     try {
       return super.setFixedCropRatio(ratio);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setShowCropCircle(bool show) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setShowCropCircle');
+    try {
+      return super.setShowCropCircle(show);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }

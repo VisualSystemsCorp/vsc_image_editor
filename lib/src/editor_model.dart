@@ -49,10 +49,10 @@ const availableColors = [
 
 const availableFontSizes = [
   30.0,
-  45.0,
   60.0,
-  75.0,
   90.0,
+  150.0,
+  220.0,
 ];
 
 enum _Corner { topLeft, topRight, bottomLeft, bottomRight }
@@ -60,11 +60,8 @@ enum _Corner { topLeft, topRight, bottomLeft, bottomRight }
 class EditorModel = EditorModelBase with _$EditorModel;
 
 abstract class EditorModelBase with Store {
-  EditorModelBase(
-    Uint8List imageBytes, {
-    double? fixedCropRatio,
-  }) {
-    _initialize(imageBytes, fixedCropRatio);
+  EditorModelBase(Uint8List imageBytes) {
+    _initialize(imageBytes);
   }
 
   final TransformationController viewportTransformationController =
@@ -84,6 +81,9 @@ abstract class EditorModelBase with Store {
 
   @readonly
   double? _fixedCropRatio;
+
+  @readonly
+  bool _showCropCircle = false;
 
   ui.Rect get fullImageRotatedPhysicalRect => MatrixUtils.transformRect(
       _physicalCropRotationMatrix,
@@ -133,7 +133,7 @@ abstract class EditorModelBase with Store {
   var _brushSize = availableBrushSizes[availableBrushSizes.length ~/ 2];
 
   @readonly
-  var _fontSize = availableFontSizes[availableFontSizes.length ~/ 2];
+  var _fontSize = availableFontSizes[availableFontSizes.length - 1];
 
   @readonly
   Color _drawingColor = availableColors[0];
@@ -151,11 +151,10 @@ abstract class EditorModelBase with Store {
   final _imagePainterNotifier = ValueNotifier<bool>(false);
 
   @action
-  Future<void> _initialize(Uint8List imageBytes, double? fixedCropRatio) async {
+  Future<void> _initialize(Uint8List imageBytes) async {
     _imagePainter = _ImagePainter(this as EditorModel, _imagePainterNotifier);
     imagePainterWidget = _ImagePainterWidget(model: this as EditorModel);
     _selectedObjectControl = _SelectedObjectControl(model: this as EditorModel);
-    _fixedCropRatio = fixedCropRatio;
 
     viewportTransformationController.addListener(() {
       _zoomScale = viewportTransformationController.value.getMaxScaleOnAxis();
@@ -186,8 +185,12 @@ abstract class EditorModelBase with Store {
     final newViewPort =
         ui.Rect.fromLTWH(_viewport.left, _viewport.top, width, height);
     if (newViewPort != _viewport) {
+      // debugPrint('Setting viewport to $newViewPort');
+      final firstTimeSettingViewport = _viewport == Rect.zero;
       _viewport = newViewPort;
-      // debugPrint('viewport updated $_viewport');
+      if (firstTimeSettingViewport) {
+        scaleToFitViewport();
+      }
     }
   }
 
@@ -243,6 +246,9 @@ abstract class EditorModelBase with Store {
       _updateCropRect(_controlCropRect, _Corner.bottomRight);
     }
   }
+
+  @action
+  void setShowCropCircle(bool show) => _showCropCircle = show;
 
   /// Sets the new scale, which also resets the pan (translation).
   @action
@@ -305,19 +311,49 @@ abstract class EditorModelBase with Store {
     _savedPhysicalNonRotatedCropRect = _physicalNonRotatedCropRect;
     clearCrop();
 
-    // Zoom so full image fits viewport, and reset pan
+    // Zoom so full image fits viewport, and reset pan.
     scaleToFitViewport();
 
-    final insetX = _viewport.width * 0.10;
-    final insetY = _viewport.height * 0.10;
-    _updateCropRect(
-        ui.Rect.fromLTRB(insetX, insetY, _viewport.width - insetX,
-            _viewport.height - insetY),
-        _Corner.bottomRight);
+    final imageViewportRect = viewportImageRect;
+    final cropRatio = _fixedCropRatio;
+    if (cropRatio == null) {
+      final insetX = imageViewportRect.width * 0.05;
+      final insetY = imageViewportRect.height * 0.05;
+      _updateCropRect(
+          ui.Rect.fromLTRB(insetX, insetY, imageViewportRect.width - insetX,
+              imageViewportRect.height - insetY),
+          _Corner.bottomRight);
+    } else {
+      var targetWidth = imageViewportRect.width * 0.90;
+      var targetHeight = targetWidth / cropRatio;
+      if (targetHeight > imageViewportRect.height) {
+        targetHeight = imageViewportRect.height * 0.90;
+        targetWidth = targetHeight * cropRatio;
+      }
+
+      assert(targetWidth <= imageViewportRect.width);
+      assert(targetHeight <= imageViewportRect.height);
+
+      // Center the crop rect.
+      // _controlCropRect = ui.Rect.fromLTWH((imageViewportRect.width - targetWidth) / 2,
+      //     (imageViewportRect.height - targetHeight) / 2, targetWidth, targetHeight);
+      _updateCropRect(
+          ui.Rect.fromLTWH(
+              (imageViewportRect.width - targetWidth) / 2,
+              (imageViewportRect.height - targetHeight) / 2,
+              targetWidth,
+              targetHeight),
+          _Corner.topLeft);
+    }
 
     _viewportOverlays
       ..clear()
       ..add(_CropControl(model: this as EditorModel));
+  }
+
+  ui.Rect get viewportImageRect {
+    return MatrixUtils.transformRect(
+        viewportTransformationController.value, fullImageRotatedPhysicalRect);
   }
 
   @action
@@ -339,8 +375,7 @@ abstract class EditorModelBase with Store {
   @action
   void dragCrop(DragUpdateDetails details) {
     final newRect = _controlCropRect.shift(details.delta);
-    final imageViewportRect = MatrixUtils.transformRect(
-        viewportTransformationController.value, fullImageRotatedPhysicalRect);
+    final imageViewportRect = viewportImageRect;
     if (imageViewportRect.intersect(newRect) != newRect) {
       // Proposed rect exceeds bounds, don't move it
       return;
@@ -382,8 +417,7 @@ abstract class EditorModelBase with Store {
     }
 
     // Cannot be out of bounds of image.
-    final imageViewportRect = MatrixUtils.transformRect(
-        viewportTransformationController.value, fullImageRotatedPhysicalRect);
+    final imageViewportRect = viewportImageRect;
 
     if (left < imageViewportRect.left) {
       left = imageViewportRect.left;
@@ -877,6 +911,18 @@ class _CropControl extends StatelessWidget {
               bottom: model.viewport.bottom - cropRect.bottom,
               child: GestureDetector(
                 onPanUpdate: (details) => model.dragCrop(details),
+                behavior: HitTestBehavior.opaque,
+                child: model.showCropCircle
+                    ? Container(
+                        decoration: ShapeDecoration(
+                          shape: StadiumBorder(
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.70),
+                            ),
+                          ),
+                        ),
+                      )
+                    : null,
               ),
             ),
             // upper left

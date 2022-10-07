@@ -17,6 +17,8 @@ const _defaultToolNames = <Tool, String>{
   Tool.arrow: 'Arrow',
 };
 
+const _buttonBarGap = SizedBox(width: 12);
+
 /// A widget which allows the user to crop, rotate, and annotate an image.
 class VscImageEditor extends StatefulWidget {
   const VscImageEditor({
@@ -24,6 +26,8 @@ class VscImageEditor extends StatefulWidget {
     required this.imageBytes,
     this.controller,
     this.fixedCropRatio,
+    this.selectedTool,
+    this.showCropCircle = false,
   }) : super(key: key);
 
   /// The original unedited image.
@@ -37,6 +41,13 @@ class VscImageEditor extends StatefulWidget {
   /// to height, so a 16:9 ratio = 1.7778.
   final double? fixedCropRatio;
 
+  /// If set, this is the tool that will be selected when the editor starts.
+  final Tool? selectedTool;
+
+  /// If true, the crop rectangle will show an embedded circle which is useful
+  /// if you're setting a circle-based avatar with a [fixedCropRatio] of 1.0.
+  final bool showCropCircle;
+
   @override
   State<VscImageEditor> createState() => VscImageEditorState();
 }
@@ -48,10 +59,8 @@ class VscImageEditorState extends State<VscImageEditor> {
 
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
-    _model =
-        EditorModel(widget.imageBytes, fixedCropRatio: widget.fixedCropRatio);
+    _model = EditorModel(widget.imageBytes);
     widget.controller?.model = _model;
   }
 
@@ -59,6 +68,11 @@ class VscImageEditorState extends State<VscImageEditor> {
   void didUpdateWidget(covariant VscImageEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     _model.setFixedCropRatio(widget.fixedCropRatio);
+    if (widget.selectedTool != null) {
+      _model.selectTool(widget.selectedTool!);
+    }
+
+    _model.setShowCropCircle(widget.showCropCircle);
   }
 
   @override
@@ -87,30 +101,32 @@ class VscImageEditorState extends State<VscImageEditor> {
                 builder: (context, constraints) {
                   _model.setViewportSize(
                       constraints.maxWidth, constraints.maxHeight);
-                  return Observer(builder: (context) {
-                    return Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Zoom(
-                            initTotalZoomOut: true,
-                            enableScroll: false,
-                            transformationController:
-                                _model.viewportTransformationController,
-                            child: _model.imagePainterWidget,
+                  return Observer(
+                    builder: (context) {
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            child: Zoom(
+                              initTotalZoomOut: false,
+                              enableScroll: false,
+                              transformationController:
+                                  _model.viewportTransformationController,
+                              child: _model.imagePainterWidget,
+                            ),
                           ),
-                        ),
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTapUp: (p) =>
-                                _model.maybeSelectAnnotationAt(p.localPosition),
+                          Positioned.fill(
+                            child: GestureDetector(
+                              onTapUp: (p) => _model
+                                  .maybeSelectAnnotationAt(p.localPosition),
+                            ),
                           ),
-                        ),
-                        Positioned.fill(
-                          child: Stack(children: _model.viewportOverlays),
-                        ),
-                      ],
-                    );
-                  });
+                          Positioned.fill(
+                            child: Stack(children: _model.viewportOverlays),
+                          ),
+                        ],
+                      );
+                    },
+                  );
                 },
               ),
             ),
@@ -178,7 +194,7 @@ class VscImageEditorState extends State<VscImageEditor> {
       key: const ValueKey('draw'),
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        const SizedBox(width: 24),
+        _buttonBarGap,
         Icon(_model.selectedTool.icon),
         const Spacer(),
         FloatingActionButton.small(
@@ -186,21 +202,21 @@ class VscImageEditorState extends State<VscImageEditor> {
           tooltip: 'Apply drawing',
           child: const Icon(Icons.done),
         ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         FloatingActionButton.small(
           onPressed: () => _model.discardAnnotations(),
           tooltip: 'Discard drawing',
           child: const Icon(Icons.close),
         ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         FloatingActionButton.small(
           onPressed: () => _model.undoLastWorkingAnnotation(),
           tooltip: 'Undo',
           child: const Icon(Icons.undo),
         ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         _buildColorPicker(),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         PopupMenuButton(
           itemBuilder: (context) => availableBrushSizes
               .map(
@@ -235,7 +251,7 @@ class VscImageEditorState extends State<VscImageEditor> {
       key: const ValueKey('text'),
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        const SizedBox(width: 24),
+        _buttonBarGap,
         Icon(_model.selectedTool.icon),
         const Spacer(),
         FloatingActionButton.small(
@@ -243,21 +259,21 @@ class VscImageEditorState extends State<VscImageEditor> {
           tooltip: 'Apply',
           child: const Icon(Icons.done),
         ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         FloatingActionButton.small(
           onPressed: () => _model.discardAnnotations(),
           tooltip: 'Discard',
           child: const Icon(Icons.close),
         ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         FloatingActionButton.small(
           onPressed: () => _model.undoLastWorkingAnnotation(),
           tooltip: 'Undo',
           child: const Icon(Icons.undo),
         ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         _buildColorPicker(),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         PopupMenuButton(
           itemBuilder: (context) => availableFontSizes
               .map(
@@ -266,7 +282,7 @@ class VscImageEditorState extends State<VscImageEditor> {
                   child: Text(
                     'A',
                     style: TextStyle(
-                        fontSize: size / 2,
+                        fontSize: size / 3,
                         fontWeight: FontWeight.bold,
                         color: (_model.fontSize == size) ? Colors.green : null),
                   ),
