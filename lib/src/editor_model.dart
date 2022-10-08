@@ -60,7 +60,15 @@ enum _Corner { topLeft, topRight, bottomLeft, bottomRight }
 class EditorModel = EditorModelBase with _$EditorModel;
 
 abstract class EditorModelBase with Store {
-  EditorModelBase(Uint8List imageBytes) {
+  EditorModelBase(
+    Uint8List imageBytes, {
+    double? fixedCropRatio,
+    Tool? selectedTool,
+    bool showCropCircle = false,
+  }) {
+    _fixedCropRatio = fixedCropRatio;
+    _showCropCircle = showCropCircle;
+    _selectedToolPendingViewport = selectedTool ?? Tool.select;
     _initialize(imageBytes);
   }
 
@@ -118,6 +126,8 @@ abstract class EditorModelBase with Store {
 
   @readonly
   var _selectedTool = Tool.select;
+
+  Tool? _selectedToolPendingViewport;
 
   @readonly
   // ignore: prefer_final_fields
@@ -191,12 +201,22 @@ abstract class EditorModelBase with Store {
       if (firstTimeSettingViewport) {
         scaleToFitViewport();
       }
+
+      if (_selectedToolPendingViewport != null) {
+        selectTool(_selectedToolPendingViewport!);
+        _selectedToolPendingViewport = null;
+      }
     }
   }
 
   @action
   void selectTool(Tool tool, {bool cancelCropping = true}) {
     if (tool == _selectedTool) return;
+    if (_viewport.isEmpty) {
+      // Do it after viewport is set
+      _selectedToolPendingViewport = tool;
+      return;
+    }
 
     final lastTool = _selectedTool;
     _selectedTool = tool;

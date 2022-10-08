@@ -154,9 +154,13 @@ class _ExampleState extends State<_Example> {
           : VscImageEditor(
               imageBytes: _imageBytes!,
               controller: controller,
-              fixedCropRatio: _cropRatio,
-              selectedTool: _selectedTool,
-              showCropCircle: _showCropCircle,
+              fixedCropRatio: 1.0,
+              selectedTool: Tool.crop,
+              showCropCircle: true,
+
+              // fixedCropRatio: _cropRatio,
+              // selectedTool: _selectedTool,
+              // showCropCircle: _showCropCircle,
             ),
     );
   }

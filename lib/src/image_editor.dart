@@ -60,7 +60,12 @@ class VscImageEditorState extends State<VscImageEditor> {
   @override
   void initState() {
     super.initState();
-    _model = EditorModel(widget.imageBytes);
+    _model = EditorModel(
+      widget.imageBytes,
+      fixedCropRatio: widget.fixedCropRatio,
+      selectedTool: widget.selectedTool,
+      showCropCircle: widget.showCropCircle,
+    );
     widget.controller?.model = _model;
   }
 
