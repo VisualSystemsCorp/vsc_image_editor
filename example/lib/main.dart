@@ -128,11 +128,13 @@ class _ExampleState extends State<_Example> {
           //     },
           //   ),
           // if (!isMobile)
-          TextButton(
-            onPressed: () => _save(context),
-            child: Text(
-              'Save',
-              style: buttonTextStyle,
+          Expanded(
+            child: TextButton(
+              onPressed: () => _save(context),
+              child: Text(
+                'Save',
+                style: buttonTextStyle,
+              ),
             ),
           ),
 
