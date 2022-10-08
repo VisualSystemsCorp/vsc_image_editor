@@ -75,71 +75,77 @@ class _ExampleState extends State<_Example> {
       appBar: AppBar(
         title: const Text('VscImageEditor'),
         actions: [
-          ToggleButtons(
-            isSelected: _toolSelections,
-            onPressed: (index) {
-              _toolSelections.setAll(0, [false, false, false]);
-              _toolSelections[index] = true;
-              _selectedTool = _selectableTools[index];
-              setState(() {});
-            },
-            selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
-            children: _selectableTools
-                .map((tool) => Icon(tool.icon, color: colorScheme.onPrimary))
-                .toList(growable: false),
-          ),
-          VerticalDivider(
-            color: colorScheme.onPrimary,
-            indent: 10,
-            endIndent: 10,
-          ),
-          ToggleButtons(
-            isSelected: _cropRatioSelections,
-            onPressed: (index) {
-              _cropRatioSelections.setAll(0, [false, false, false]);
-              _cropRatioSelections[index] = true;
-              _cropRatio = _cropRatios[index];
-              _showCropCircle = _cropRatio == 1;
-              setState(() {});
-            },
-            selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
-            children: [
-              Text('Free', style: buttonTextStyle),
-              Text('1:1', style: buttonTextStyle),
-              Text('16:9', style: buttonTextStyle),
-            ],
-          ),
-          VerticalDivider(
-            color: colorScheme.onPrimary,
-            indent: 10,
-            endIndent: 10,
-          ),
-          // // Builder is needed to get the correct context for _share().
-          // if (isMobile)
-          //   Builder(
-          //     builder: (context) {
-          //       return TextButton(
-          //         onPressed: () => _share(context),
-          //         child: Text(
-          //           'Share',
-          //           style: buttonTextStyle,
-          //         ),
-          //       );
-          //     },
-          //   ),
-          // if (!isMobile)
           Expanded(
-            child: TextButton(
-              onPressed: () => _save(context),
-              child: Text(
-                'Save',
-                style: buttonTextStyle,
-              ),
+            flex: 0,
+            child: Row(
+              children: [
+                ToggleButtons(
+                  isSelected: _toolSelections,
+                  onPressed: (index) {
+                    _toolSelections.setAll(0, [false, false, false]);
+                    _toolSelections[index] = true;
+                    _selectedTool = _selectableTools[index];
+                    setState(() {});
+                  },
+                  selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
+                  children: _selectableTools
+                      .map((tool) =>
+                          Icon(tool.icon, color: colorScheme.onPrimary))
+                      .toList(growable: false),
+                ),
+                VerticalDivider(
+                  color: colorScheme.onPrimary,
+                  indent: 10,
+                  endIndent: 10,
+                ),
+                ToggleButtons(
+                  isSelected: _cropRatioSelections,
+                  onPressed: (index) {
+                    _cropRatioSelections.setAll(0, [false, false, false]);
+                    _cropRatioSelections[index] = true;
+                    _cropRatio = _cropRatios[index];
+                    _showCropCircle = _cropRatio == 1;
+                    setState(() {});
+                  },
+                  selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
+                  children: [
+                    Text('Free', style: buttonTextStyle),
+                    Text('1:1', style: buttonTextStyle),
+                    Text('16:9', style: buttonTextStyle),
+                  ],
+                ),
+                VerticalDivider(
+                  color: colorScheme.onPrimary,
+                  indent: 10,
+                  endIndent: 10,
+                ),
+                // // Builder is needed to get the correct context for _share().
+                // if (isMobile)
+                //   Builder(
+                //     builder: (context) {
+                //       return TextButton(
+                //         onPressed: () => _share(context),
+                //         child: Text(
+                //           'Share',
+                //           style: buttonTextStyle,
+                //         ),
+                //       );
+                //     },
+                //   ),
+                // if (!isMobile)
+                TextButton(
+                  onPressed: () => _save(context),
+                  child: Text(
+                    'Save',
+                    style: buttonTextStyle,
+                  ),
+                ),
+
+                // Avoid the "Debug" banner
+                if (!isMobile) const SizedBox(width: 24),
+              ],
             ),
           ),
-
-          // Avoid the "Debug" banner
-          if (!isMobile) const SizedBox(width: 24),
         ],
       ),
       // "medium" provides better scaling results than "high" - see https://github.com/flutter/flutter/issues/79645#issuecomment-819920763.
@@ -157,6 +163,38 @@ class _ExampleState extends State<_Example> {
 
   Future<void> _save(BuildContext context) async {
     final box = context.findRenderObject() as RenderBox?;
+    final navigator = Navigator.of(context);
+
+    var dialogDisplayed = false;
+    showDialog(
+      context: context,
+      builder: (context) {
+        dialogDisplayed = true;
+        return const SimpleDialog(
+          titlePadding: EdgeInsets.zero,
+          children: [
+            Center(child: Text('Saving image...')),
+          ],
+        );
+      },
+      barrierDismissible: false,
+    );
+
+    while (!dialogDisplayed) {
+      await Future.delayed(const Duration(milliseconds: 32));
+    }
+
+    // Wait for dialog animations to complete.
+    await Future.delayed(const Duration(milliseconds: 100));
+    try {
+      await _saveWhileDialogDisplayed(box);
+    } finally {
+      // Remove the dialog
+      navigator.pop();
+    }
+  }
+
+  Future<void> _saveWhileDialogDisplayed(RenderBox? box) async {
     final encodedBytes = await _getEncodedBytes();
     if (kIsWeb) {
       final path = await FileSaver.instance.saveFile(

@@ -83,67 +83,69 @@ class VscImageEditorState extends State<VscImageEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return Observer(builder: (context) {
-      if (!_model.initialized) {
-        return const Center(child: CircularProgressIndicator());
-      }
+    return Observer(
+      builder: (context) {
+        if (!_model.initialized) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-      _model.fixedCropRatio; // Watch this
-      final theme = Theme.of(context);
-      return BottomNavigationBarTheme(
-        data: theme.bottomNavigationBarTheme,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  _model.setViewportSize(
-                      constraints.maxWidth, constraints.maxHeight);
-                  return Observer(
-                    builder: (context) {
-                      return Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Zoom(
-                              initTotalZoomOut: false,
-                              enableScroll: false,
-                              transformationController:
-                                  _model.viewportTransformationController,
-                              child: _model.imagePainterWidget,
+        _model.fixedCropRatio; // Watch this
+        final theme = Theme.of(context);
+        return BottomNavigationBarTheme(
+          data: theme.bottomNavigationBarTheme,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    _model.setViewportSize(
+                        constraints.maxWidth, constraints.maxHeight);
+                    return Observer(
+                      builder: (context) {
+                        return Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Zoom(
+                                initTotalZoomOut: false,
+                                enableScroll: false,
+                                transformationController:
+                                    _model.viewportTransformationController,
+                                child: _model.imagePainterWidget,
+                              ),
                             ),
-                          ),
-                          Positioned.fill(
-                            child: GestureDetector(
-                              onTapUp: (p) => _model
-                                  .maybeSelectAnnotationAt(p.localPosition),
+                            Positioned.fill(
+                              child: GestureDetector(
+                                onTapUp: (p) => _model
+                                    .maybeSelectAnnotationAt(p.localPosition),
+                              ),
                             ),
-                          ),
-                          Positioned.fill(
-                            child: Stack(children: _model.viewportOverlays),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
+                            Positioned.fill(
+                              child: Stack(children: _model.viewportOverlays),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
-            Container(
-              color: theme.colorScheme.surface,
-              height: 64,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) =>
-                    ScaleTransition(scale: animation, child: child),
-                child: _buildButtons(),
+              Container(
+                color: theme.colorScheme.surface,
+                height: 64,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) =>
+                      ScaleTransition(scale: animation, child: child),
+                  child: _buildButtons(),
+                ),
               ),
-            ),
-          ],
-        ),
-      );
-    });
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildButtons() {
