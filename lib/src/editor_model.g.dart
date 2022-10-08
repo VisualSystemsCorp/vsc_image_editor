@@ -69,6 +69,42 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
+  late final _$_fixedCropRatioAtom =
+      Atom(name: 'EditorModelBase._fixedCropRatio', context: context);
+
+  double? get fixedCropRatio {
+    _$_fixedCropRatioAtom.reportRead();
+    return super._fixedCropRatio;
+  }
+
+  @override
+  double? get _fixedCropRatio => fixedCropRatio;
+
+  @override
+  set _fixedCropRatio(double? value) {
+    _$_fixedCropRatioAtom.reportWrite(value, super._fixedCropRatio, () {
+      super._fixedCropRatio = value;
+    });
+  }
+
+  late final _$_showCropCircleAtom =
+      Atom(name: 'EditorModelBase._showCropCircle', context: context);
+
+  bool get showCropCircle {
+    _$_showCropCircleAtom.reportRead();
+    return super._showCropCircle;
+  }
+
+  @override
+  bool get _showCropCircle => showCropCircle;
+
+  @override
+  set _showCropCircle(bool value) {
+    _$_showCropCircleAtom.reportWrite(value, super._showCropCircle, () {
+      super._showCropCircle = value;
+    });
+  }
+
   late final _$_physicalNonRotatedCropRectAtom = Atom(
       name: 'EditorModelBase._physicalNonRotatedCropRect', context: context);
 
@@ -233,6 +269,24 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
+  late final _$_fontSizeAtom =
+      Atom(name: 'EditorModelBase._fontSize', context: context);
+
+  double get fontSize {
+    _$_fontSizeAtom.reportRead();
+    return super._fontSize;
+  }
+
+  @override
+  double get _fontSize => fontSize;
+
+  @override
+  set _fontSize(double value) {
+    _$_fontSizeAtom.reportWrite(value, super._fontSize, () {
+      super._fontSize = value;
+    });
+  }
+
   late final _$_drawingColorAtom =
       Atom(name: 'EditorModelBase._drawingColor', context: context);
 
@@ -323,6 +377,28 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
+  void setFixedCropRatio(double? ratio) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setFixedCropRatio');
+    try {
+      return super.setFixedCropRatio(ratio);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void setShowCropCircle(bool show) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setShowCropCircle');
+    try {
+      return super.setShowCropCircle(show);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   void setScale(double scale) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
         name: 'EditorModelBase.setScale');
@@ -400,44 +476,55 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
-  void updateCropLeftTop(DragUpdateDetails details) {
+  void dragCrop(DragUpdateDetails details) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateCropLeftTop');
+        name: 'EditorModelBase.dragCrop');
     try {
-      return super.updateCropLeftTop(details);
+      return super.dragCrop(details);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
   }
 
   @override
-  void updateCropLeftBottom(DragUpdateDetails details) {
+  void updateCropTopLeft(DragUpdateDetails details) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateCropLeftBottom');
+        name: 'EditorModelBase.updateCropTopLeft');
     try {
-      return super.updateCropLeftBottom(details);
+      return super.updateCropTopLeft(details);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
   }
 
   @override
-  void updateCropRightTop(DragUpdateDetails details) {
+  void updateCropBottomLeft(DragUpdateDetails details) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateCropRightTop');
+        name: 'EditorModelBase.updateCropBottomLeft');
     try {
-      return super.updateCropRightTop(details);
+      return super.updateCropBottomLeft(details);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
   }
 
   @override
-  void updateCropRightBottom(DragUpdateDetails details) {
+  void updateCropTopRight(DragUpdateDetails details) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.updateCropRightBottom');
+        name: 'EditorModelBase.updateCropTopRight');
     try {
-      return super.updateCropRightBottom(details);
+      return super.updateCropTopRight(details);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void updateCropBottomRight(DragUpdateDetails details) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.updateCropBottomRight');
+    try {
+      return super.updateCropBottomRight(details);
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
@@ -466,33 +553,33 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
-  void applyDrawing() {
+  void applyAnnotations() {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.applyDrawing');
+        name: 'EditorModelBase.applyAnnotations');
     try {
-      return super.applyDrawing();
+      return super.applyAnnotations();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
   }
 
   @override
-  void clearDrawing() {
+  void undoLastWorkingAnnotation() {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.clearDrawing');
+        name: 'EditorModelBase.undoLastWorkingAnnotation');
     try {
-      return super.clearDrawing();
+      return super.undoLastWorkingAnnotation();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
   }
 
   @override
-  void discardDrawing() {
+  void discardAnnotations() {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
-        name: 'EditorModelBase.discardDrawing');
+        name: 'EditorModelBase.discardAnnotations');
     try {
-      return super.discardDrawing();
+      return super.discardAnnotations();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }
@@ -521,11 +608,99 @@ mixin _$EditorModel on EditorModelBase, Store {
   }
 
   @override
+  void setFontSize(double size) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.setFontSize');
+    try {
+      return super.setFontSize(size);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingOval() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingOval');
+    try {
+      return super.startDrawingOval();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingRect() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingRect');
+    try {
+      return super.startDrawingRect();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingLine() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingLine');
+    try {
+      return super.startDrawingLine();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingArrow() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingArrow');
+    try {
+      return super.startDrawingArrow();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void startDrawingText() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.startDrawingText');
+    try {
+      return super.startDrawingText();
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   void maybeSelectAnnotationAt(Offset viewportPoint) {
     final _$actionInfo = _$EditorModelBaseActionController.startAction(
         name: 'EditorModelBase.maybeSelectAnnotationAt');
     try {
       return super.maybeSelectAnnotationAt(viewportPoint);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void moveSelectedObject(Offset viewportDelta) {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.moveSelectedObject');
+    try {
+      return super.moveSelectedObject(viewportDelta);
+    } finally {
+      _$EditorModelBaseActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
+  void removeSelectedObject() {
+    final _$actionInfo = _$EditorModelBaseActionController.startAction(
+        name: 'EditorModelBase.removeSelectedObject');
+    try {
+      return super.removeSelectedObject();
     } finally {
       _$EditorModelBaseActionController.endAction(_$actionInfo);
     }

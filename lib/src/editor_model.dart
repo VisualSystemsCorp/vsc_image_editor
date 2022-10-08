@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -15,9 +14,11 @@ enum Tool {
   select(Icons.pan_tool_alt),
   crop(Icons.crop),
   draw(Icons.gesture),
-  text(Icons.text_fields),
+  text(Icons.title),
   oval(Icons.circle_outlined),
-  rectangle(Icons.rectangle_outlined);
+  rectangle(Icons.rectangle_outlined),
+  line(Icons.horizontal_rule),
+  arrow(Icons.north_east);
 
   const Tool(this.icon);
 
@@ -26,6 +27,7 @@ enum Tool {
 
 const _radians90Left = -pi / 2;
 const _radians90Right = pi / 2;
+const _arrowAngle = 25 * pi / 180; // 25 degrees
 
 const availableBrushSizes = [
   5.0,
@@ -34,6 +36,7 @@ const availableBrushSizes = [
   30.0,
   40.0,
 ];
+
 const availableColors = [
   Colors.yellow,
   Colors.red,
@@ -43,6 +46,16 @@ const availableColors = [
   Colors.white,
   Colors.black,
 ];
+
+const availableFontSizes = [
+  30.0,
+  60.0,
+  90.0,
+  150.0,
+  220.0,
+];
+
+enum _Corner { topLeft, topRight, bottomLeft, bottomRight }
 
 class EditorModel = EditorModelBase with _$EditorModel;
 
@@ -65,6 +78,12 @@ abstract class EditorModelBase with Store {
 
   @readonly
   double _fullImageNonRotatedPhysicalHeight = 0;
+
+  @readonly
+  double? _fixedCropRatio;
+
+  @readonly
+  bool _showCropCircle = false;
 
   ui.Rect get fullImageRotatedPhysicalRect => MatrixUtils.transformRect(
       _physicalCropRotationMatrix,
@@ -111,10 +130,13 @@ abstract class EditorModelBase with Store {
   bool _initialized = false;
 
   @readonly
-  var _brushSize = 10.0;
+  var _brushSize = availableBrushSizes[availableBrushSizes.length ~/ 2];
 
   @readonly
-  Color _drawingColor = Colors.yellow;
+  var _fontSize = availableFontSizes[availableFontSizes.length - 1];
+
+  @readonly
+  Color _drawingColor = availableColors[0];
 
   @readonly
   _AnnotationObject? _selectedAnnotationObject;
@@ -163,8 +185,12 @@ abstract class EditorModelBase with Store {
     final newViewPort =
         ui.Rect.fromLTWH(_viewport.left, _viewport.top, width, height);
     if (newViewPort != _viewport) {
+      // debugPrint('Setting viewport to $newViewPort');
+      final firstTimeSettingViewport = _viewport == Rect.zero;
       _viewport = newViewPort;
-      // debugPrint('viewport updated $_viewport');
+      if (firstTimeSettingViewport) {
+        scaleToFitViewport();
+      }
     }
   }
 
@@ -191,10 +217,38 @@ abstract class EditorModelBase with Store {
         startFreeDrawing();
         break;
 
-      default:
+      case Tool.oval:
+        startDrawingOval();
+        break;
+
+      case Tool.rectangle:
+        startDrawingRect();
+        break;
+
+      case Tool.line:
+        startDrawingLine();
+        break;
+
+      case Tool.arrow:
+        startDrawingArrow();
+        break;
+
+      case Tool.text:
+        startDrawingText();
         break;
     }
   }
+
+  @action
+  void setFixedCropRatio(double? ratio) {
+    if (ratio != _fixedCropRatio) {
+      _fixedCropRatio = ratio;
+      _updateCropRect(_controlCropRect, _Corner.bottomRight);
+    }
+  }
+
+  @action
+  void setShowCropCircle(bool show) => _showCropCircle = show;
 
   /// Sets the new scale, which also resets the pan (translation).
   @action
@@ -257,17 +311,49 @@ abstract class EditorModelBase with Store {
     _savedPhysicalNonRotatedCropRect = _physicalNonRotatedCropRect;
     clearCrop();
 
-    // Zoom so full image fits viewport, and reset pan
+    // Zoom so full image fits viewport, and reset pan.
     scaleToFitViewport();
 
-    final insetX = _viewport.width * 0.10;
-    final insetY = _viewport.height * 0.10;
-    _updateCropRect(ui.Rect.fromLTRB(
-        insetX, insetY, _viewport.width - insetX, _viewport.height - insetY));
+    final imageViewportRect = viewportImageRect;
+    final cropRatio = _fixedCropRatio;
+    if (cropRatio == null) {
+      final insetX = imageViewportRect.width * 0.05;
+      final insetY = imageViewportRect.height * 0.05;
+      _updateCropRect(
+          ui.Rect.fromLTRB(insetX, insetY, imageViewportRect.width - insetX,
+              imageViewportRect.height - insetY),
+          _Corner.bottomRight);
+    } else {
+      var targetWidth = imageViewportRect.width * 0.90;
+      var targetHeight = targetWidth / cropRatio;
+      if (targetHeight > imageViewportRect.height) {
+        targetHeight = imageViewportRect.height * 0.90;
+        targetWidth = targetHeight * cropRatio;
+      }
+
+      assert(targetWidth <= imageViewportRect.width);
+      assert(targetHeight <= imageViewportRect.height);
+
+      // Center the crop rect.
+      // _controlCropRect = ui.Rect.fromLTWH((imageViewportRect.width - targetWidth) / 2,
+      //     (imageViewportRect.height - targetHeight) / 2, targetWidth, targetHeight);
+      _updateCropRect(
+          ui.Rect.fromLTWH(
+              (imageViewportRect.width - targetWidth) / 2,
+              (imageViewportRect.height - targetHeight) / 2,
+              targetWidth,
+              targetHeight),
+          _Corner.topLeft);
+    }
 
     _viewportOverlays
       ..clear()
       ..add(_CropControl(model: this as EditorModel));
+  }
+
+  ui.Rect get viewportImageRect {
+    return MatrixUtils.transformRect(
+        viewportTransformationController.value, fullImageRotatedPhysicalRect);
   }
 
   @action
@@ -287,30 +373,52 @@ abstract class EditorModelBase with Store {
   }
 
   @action
-  void updateCropLeftTop(DragUpdateDetails details) {
+  void dragCrop(DragUpdateDetails details) {
+    final newRect = _controlCropRect.shift(details.delta);
+    final imageViewportRect = viewportImageRect;
+    if (imageViewportRect.intersect(newRect) != newRect) {
+      // Proposed rect exceeds bounds, don't move it
+      return;
+    }
+
+    _controlCropRect = newRect;
+  }
+
+  @action
+  void updateCropTopLeft(DragUpdateDetails details) {
     final newRect = ui.Rect.fromLTRB(
         _controlCropRect.left + details.delta.dx,
         _controlCropRect.top + details.delta.dy,
         _controlCropRect.right,
         _controlCropRect.bottom);
-    _updateCropRect(newRect);
+    _updateCropRect(newRect, _Corner.topLeft);
   }
 
-  void _updateCropRect(ui.Rect newRect) {
+  void _updateCropRect(ui.Rect newRect, _Corner adjustingCorner) {
     var left = newRect.left;
     var right = newRect.right;
     var top = newRect.top;
     var bottom = newRect.bottom;
     if (left > right) {
-      left = right;
+      if (adjustingCorner == _Corner.bottomRight ||
+          adjustingCorner == _Corner.topRight) {
+        right = left;
+      } else {
+        left = right;
+      }
     }
     if (top > bottom) {
-      top = bottom;
+      if (adjustingCorner == _Corner.bottomRight ||
+          adjustingCorner == _Corner.bottomLeft) {
+        bottom = top;
+      } else {
+        top = bottom;
+      }
     }
 
     // Cannot be out of bounds of image.
-    final imageViewportRect = MatrixUtils.transformRect(
-        viewportTransformationController.value, fullImageRotatedPhysicalRect);
+    final imageViewportRect = viewportImageRect;
+
     if (left < imageViewportRect.left) {
       left = imageViewportRect.left;
     }
@@ -327,37 +435,75 @@ abstract class EditorModelBase with Store {
       bottom = imageViewportRect.bottom;
     }
 
+    final cropRatio = _fixedCropRatio;
+    if (cropRatio != null) {
+      var width = right - left;
+      var height = bottom - top;
+      final targetHeight = width / cropRatio;
+      if ((height - targetHeight).abs() > 0.0001) {
+        if (targetHeight > imageViewportRect.height) {
+          // Adjust width because height would become too tall.
+          final targetWidth = height * cropRatio;
+          if (adjustingCorner == _Corner.bottomRight ||
+              adjustingCorner == _Corner.topRight) {
+            // Adjust right
+            right = left + targetWidth;
+          } else {
+            //
+            // _Corner.bottomLeft || _Corner.topLeft: Adjust left
+            left = right - targetWidth;
+          }
+        } else {
+          // Adjust height
+          if (adjustingCorner == _Corner.bottomRight ||
+              adjustingCorner == _Corner.bottomLeft) {
+            // Adjust bottom
+            bottom = top + targetHeight;
+          } else {
+            // _Corner.topRight || _Corner.topLeft: Adjust top
+            top = bottom - targetHeight;
+          }
+
+          final proposedRect = Rect.fromLTRB(left, top, right, bottom);
+          if (imageViewportRect.intersect(proposedRect) != proposedRect) {
+            // Proposed rect exceeds bounds, don't change crop
+            return;
+          }
+        }
+      }
+    }
+
     _controlCropRect = ui.Rect.fromLTRB(left, top, right, bottom);
   }
 
   @action
-  void updateCropLeftBottom(DragUpdateDetails details) {
+  void updateCropBottomLeft(DragUpdateDetails details) {
     final newRect = ui.Rect.fromLTRB(
         _controlCropRect.left + details.delta.dx,
         _controlCropRect.top,
         _controlCropRect.right,
         _controlCropRect.bottom + details.delta.dy);
-    _updateCropRect(newRect);
+    _updateCropRect(newRect, _Corner.bottomLeft);
   }
 
   @action
-  void updateCropRightTop(DragUpdateDetails details) {
+  void updateCropTopRight(DragUpdateDetails details) {
     final newRect = ui.Rect.fromLTRB(
         _controlCropRect.left,
         _controlCropRect.top + details.delta.dy,
         _controlCropRect.right + details.delta.dx,
         _controlCropRect.bottom);
-    _updateCropRect(newRect);
+    _updateCropRect(newRect, _Corner.topRight);
   }
 
   @action
-  void updateCropRightBottom(DragUpdateDetails details) {
+  void updateCropBottomRight(DragUpdateDetails details) {
     final newRect = ui.Rect.fromLTRB(
         _controlCropRect.left,
         _controlCropRect.top,
         _controlCropRect.right + details.delta.dx,
         _controlCropRect.bottom + details.delta.dy);
-    _updateCropRect(newRect);
+    _updateCropRect(newRect, _Corner.bottomRight);
   }
 
   @action
@@ -368,6 +514,7 @@ abstract class EditorModelBase with Store {
         _controlCropRect);
     _physicalNonRotatedCropRect = MatrixUtils.transformRect(
         _physicalCropRotationMatrix.clone()..invert(), physicalRotatedCropRect);
+    scaleToFitViewport();
     selectTool(Tool.select, cancelCropping: false);
   }
 
@@ -375,9 +522,11 @@ abstract class EditorModelBase with Store {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     _imagePainter.paint(canvas, Size.zero);
-    return recorder.endRecording().toImage(
-        physicalRotatedCropRect.width.floor(),
+    final picture = recorder.endRecording();
+    final image = picture.toImage(physicalRotatedCropRect.width.floor(),
         physicalRotatedCropRect.height.floor());
+    picture.dispose();
+    return image;
   }
 
   @action
@@ -389,7 +538,7 @@ abstract class EditorModelBase with Store {
   }
 
   @action
-  void applyDrawing() {
+  void applyAnnotations() {
     final nonEmptyObjects = _workingAnnotationObjects
         .where((anno) => !anno.getBounds().isEmpty)
         .toList(growable: false);
@@ -397,18 +546,20 @@ abstract class EditorModelBase with Store {
       _annotationObjects.addAll(nonEmptyObjects);
     }
 
-    clearDrawing();
+    _workingAnnotationObjects.clear();
     selectTool(Tool.select);
   }
 
   @action
-  void clearDrawing() {
-    _workingAnnotationObjects.clear();
+  void undoLastWorkingAnnotation() {
+    if (_workingAnnotationObjects.isNotEmpty) {
+      _workingAnnotationObjects.removeLast();
+    }
   }
 
   @action
-  void discardDrawing() {
-    clearDrawing();
+  void discardAnnotations() {
+    _workingAnnotationObjects.clear();
     selectTool(Tool.select);
   }
 
@@ -431,6 +582,52 @@ abstract class EditorModelBase with Store {
   void setDrawingColor(Color color) {
     _drawingColor = color;
     updateImage();
+  }
+
+  @action
+  void setFontSize(double size) {
+    _fontSize = size;
+    updateImage();
+  }
+
+  @action
+  void startDrawingOval() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_OvalDrawControl(model: this as EditorModel));
+  }
+
+  @action
+  void startDrawingRect() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_RectDrawControl(model: this as EditorModel));
+  }
+
+  @action
+  void startDrawingLine() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_LineDrawControl(model: this as EditorModel));
+  }
+
+  @action
+  void startDrawingArrow() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_LineDrawControl(model: this as EditorModel, isArrow: true));
+  }
+
+  @action
+  void startDrawingText() {
+    _workingAnnotationObjects.clear();
+    _viewportOverlays
+      ..clear()
+      ..add(_TextDrawControl(model: this as EditorModel));
   }
 
   Offset _transformViewportPointToPhysicalImagePoint(Offset pt) {
@@ -495,9 +692,38 @@ abstract class EditorModelBase with Store {
     }
 
     if (_selectedAnnotationObject != null) {
-      debugPrint('Adding selected object control');
       _viewportOverlays.add(_selectedObjectControl);
     }
+  }
+
+  @action
+  void moveSelectedObject(Offset viewportDelta) {
+    final selectedObject = _selectedAnnotationObject;
+    if (selectedObject == null) return;
+
+    final phyCurrTopLeft = selectedObject.getBounds().topLeft;
+    final vpCurrTopLeft = _transformPhysicalImageRectToViewportRect(
+            Rect.fromLTWH(phyCurrTopLeft.dx, phyCurrTopLeft.dy, 1, 1))
+        .topLeft;
+    final phyNewTopLeft = _transformViewportPointToPhysicalImagePoint(
+        vpCurrTopLeft + viewportDelta);
+    final phyDelta = phyNewTopLeft - phyCurrTopLeft;
+    // debugPrint(
+    //     'phyDelta=$phyDelta phyCurrTopLeft=$phyCurrTopLeft vpCurrTopLeft=$vpCurrTopLeft');
+    selectedObject
+        .transform(Matrix4.translationValues(phyDelta.dx, phyDelta.dy, 0.0));
+    // Cause the selector to update
+    _selectedAnnotationObject = selectedObject;
+    updateImage();
+  }
+
+  @action
+  void removeSelectedObject() {
+    final selectedObject = _selectedAnnotationObject;
+    if (selectedObject == null) return;
+
+    _annotationObjects.remove(_selectedAnnotationObject);
+    _selectedAnnotationObject = null;
   }
 }
 
@@ -505,12 +731,14 @@ abstract class _AnnotationObject {
   void paint(Canvas canvas);
 
   Rect getBounds();
+
+  void transform(Matrix4 m);
 }
 
 class _PathAnnotationObject extends _AnnotationObject {
   _PathAnnotationObject(this.path, this._paint);
 
-  final Path path;
+  Path path;
   final Paint _paint;
 
   @override
@@ -520,6 +748,65 @@ class _PathAnnotationObject extends _AnnotationObject {
 
   @override
   ui.Rect getBounds() => path.getBounds();
+
+  @override
+  void transform(Matrix4 m) {
+    path = path.transform(m.storage);
+  }
+}
+
+class _TextAnnotationObject extends _AnnotationObject {
+  _TextAnnotationObject(
+    this.position,
+    String text,
+    double fontSize,
+    Color color,
+    double maxWidth,
+    this.rotation,
+  ) {
+    textPainter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            color: color,
+            fontSize: fontSize,
+            fontWeight: ui.FontWeight.bold,
+          ),
+        ),
+        textAlign: TextAlign.start,
+        textDirection: TextDirection.ltr)
+      ..layout(maxWidth: maxWidth);
+  }
+
+  final Offset position;
+  late final TextPainter textPainter;
+  final double rotation;
+  final _transformMatrix = Matrix4.identity();
+
+  @override
+  void paint(Canvas canvas) {
+    canvas.save();
+    canvas.transform(_transformMatrix.storage);
+    canvas.translate(position.dx, position.dy);
+    canvas.rotate(rotation);
+    canvas.translate(-position.dx, -position.dy);
+    textPainter.paint(canvas, position);
+    canvas.restore();
+  }
+
+  @override
+  ui.Rect getBounds() {
+    return MatrixUtils.transformRect(
+        _transformMatrix.clone()
+          ..translate(position.dx, position.dy)
+          ..rotateZ(rotation)
+          ..translate(-position.dx, -position.dy),
+        Rect.fromLTWH(
+            position.dx, position.dy, textPainter.width, textPainter.height));
+  }
+
+  @override
+  void transform(Matrix4 m) => _transformMatrix.multiply(m);
 }
 
 class _SelectedObjectControl extends StatelessWidget {
@@ -537,22 +824,46 @@ class _SelectedObjectControl extends StatelessWidget {
           final vpBounds =
               model._transformPhysicalImageRectToViewportRect(bounds);
           return Positioned(
-            left: vpBounds.left,
-            top: vpBounds.top,
+            left: vpBounds.left - 22,
+            top: vpBounds.top - 22,
             child: GestureDetector(
-              onPanStart: (p) {
-                debugPrint('SelectedObject onPanStart $p');
-              },
               onPanUpdate: (p) {
-                debugPrint('SelectedObject onPanUpdate $p');
+                model.moveSelectedObject(p.delta);
               },
-              onPanEnd: (p) {
-                debugPrint('SelectedObject onPanEnd $p');
-              },
-              child: Container(
-                color: Colors.green.withOpacity(0.5),
-                width: vpBounds.width,
-                height: vpBounds.height,
+              child: Stack(
+                children: [
+                  Positioned(
+                    child: Container(
+                      margin: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(width: 3, color: Colors.white),
+                        boxShadow: const [
+                          BoxShadow(blurRadius: 10, blurStyle: BlurStyle.outer),
+                        ],
+                      ),
+                      width: vpBounds.width + 28,
+                      height: vpBounds.height + 28,
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    child: InkWell(
+                      onTap: () => model.removeSelectedObject(),
+                      child: Tooltip(
+                        message: 'Remove',
+                        child: Container(
+                          decoration: const BoxDecoration(
+                              color: Colors.white, shape: BoxShape.circle),
+                          child: const Icon(
+                            Icons.clear,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -574,10 +885,14 @@ class _CropControl extends StatelessWidget {
     return Observer(
       builder: (context) {
         final cropRect = model.controlCropRect;
-        const controlWH = 15.0;
+        const controlWH = 20.0;
         const halfControlWH = controlWH / 2;
-        final controlSquare =
-            Container(color: Colors.white, width: controlWH, height: controlWH);
+        final controlCorner = Container(
+          decoration:
+              const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          width: controlWH,
+          height: controlWH,
+        );
         return Stack(
           children: [
             // scrim
@@ -588,13 +903,35 @@ class _CropControl extends StatelessWidget {
               bottom: 0,
               child: CustomPaint(painter: _CropScrimPainter(cropRect)),
             ),
+            // Inside crop can be dragged
+            Positioned(
+              left: cropRect.left,
+              top: cropRect.top,
+              right: model.viewport.right - cropRect.right,
+              bottom: model.viewport.bottom - cropRect.bottom,
+              child: GestureDetector(
+                onPanUpdate: (details) => model.dragCrop(details),
+                behavior: HitTestBehavior.opaque,
+                child: model.showCropCircle
+                    ? Container(
+                        decoration: ShapeDecoration(
+                          shape: StadiumBorder(
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.70),
+                            ),
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            ),
             // upper left
             Positioned(
               left: cropRect.left - halfControlWH,
               top: cropRect.top - halfControlWH,
               child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropLeftTop(details),
-                child: controlSquare,
+                onPanUpdate: (details) => model.updateCropTopLeft(details),
+                child: controlCorner,
               ),
             ),
             // upper right
@@ -602,8 +939,8 @@ class _CropControl extends StatelessWidget {
               left: cropRect.right - halfControlWH,
               top: cropRect.top - halfControlWH,
               child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropRightTop(details),
-                child: controlSquare,
+                onPanUpdate: (details) => model.updateCropTopRight(details),
+                child: controlCorner,
               ),
             ),
             // lower left
@@ -611,8 +948,8 @@ class _CropControl extends StatelessWidget {
               left: cropRect.left - halfControlWH,
               bottom: (model.viewport.bottom - cropRect.bottom) - halfControlWH,
               child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropLeftBottom(details),
-                child: controlSquare,
+                onPanUpdate: (details) => model.updateCropBottomLeft(details),
+                child: controlCorner,
               ),
             ),
             // lower right
@@ -620,8 +957,8 @@ class _CropControl extends StatelessWidget {
               left: cropRect.right - halfControlWH,
               bottom: (model.viewport.bottom - cropRect.bottom) - halfControlWH,
               child: GestureDetector(
-                onPanUpdate: (details) => model.updateCropRightBottom(details),
-                child: controlSquare,
+                onPanUpdate: (details) => model.updateCropBottomRight(details),
+                child: controlCorner,
               ),
             ),
           ],
@@ -631,8 +968,8 @@ class _CropControl extends StatelessWidget {
   }
 }
 
-class _FreeDrawControl extends StatelessWidget {
-  _FreeDrawControl({Key? key, required this.model}) : super(key: key);
+abstract class _PathDrawControl extends StatelessWidget {
+  _PathDrawControl({Key? key, required this.model}) : super(key: key);
 
   final EditorModel model;
   final _painterNotifier = ValueNotifier<bool>(false);
@@ -645,27 +982,8 @@ class _FreeDrawControl extends StatelessWidget {
           width: model.physicalRotatedCropRect.width,
           height: model.physicalRotatedCropRect.height,
           child: GestureDetector(
-            onPanStart: (start) {
-              final path = Path();
-              final pathObj =
-                  _PathAnnotationObject(path, model._createPathPaint());
-              model._workingAnnotationObjects.add(pathObj);
-              final pt = model._transformViewportPointToPhysicalImagePoint(
-                  start.localPosition);
-              path.moveTo(pt.dx, pt.dy);
-              _repaintDrawing();
-            },
-            onPanEnd: (_) {},
-            onPanUpdate: (update) {
-              // debugPrint('onDrawUpdate');
-              final path = (model._workingAnnotationObjects.last
-                      as _PathAnnotationObject)
-                  .path;
-              final pt = model._transformViewportPointToPhysicalImagePoint(
-                  update.localPosition);
-              path.lineTo(pt.dx, pt.dy);
-              _repaintDrawing();
-            },
+            onPanStart: onDrawStart,
+            onPanUpdate: onDrawUpdate,
             child: CustomPaint(
               // TODO I can't explain why, but this do-nothing painter is required to get the image to update while drawing.
               //  It may be because it repaints on the _painterNotifier change, but not sure.
@@ -680,6 +998,203 @@ class _FreeDrawControl extends StatelessWidget {
   }
 
   void _repaintDrawing() => _painterNotifier.value = !_painterNotifier.value;
+
+  void onDrawStart(DragStartDetails start);
+
+  void onDrawUpdate(DragUpdateDetails update);
+}
+
+class _FreeDrawControl extends _PathDrawControl {
+  _FreeDrawControl({Key? key, required EditorModel model})
+      : super(key: key, model: model);
+
+  @override
+  void onDrawStart(DragStartDetails start) {
+    final path = Path();
+    final pathObj = _PathAnnotationObject(path, model._createPathPaint());
+    model._workingAnnotationObjects.add(pathObj);
+    final pt =
+        model._transformViewportPointToPhysicalImagePoint(start.localPosition);
+    path.moveTo(pt.dx, pt.dy);
+    _repaintDrawing();
+  }
+
+  @override
+  void onDrawUpdate(DragUpdateDetails update) {
+    final path =
+        (model._workingAnnotationObjects.last as _PathAnnotationObject).path;
+    final pt =
+        model._transformViewportPointToPhysicalImagePoint(update.localPosition);
+    path.lineTo(pt.dx, pt.dy);
+    _repaintDrawing();
+  }
+}
+
+class _OvalDrawControl extends _PathDrawControl {
+  _OvalDrawControl({Key? key, required EditorModel model})
+      : super(key: key, model: model);
+
+  final _startPt = _ValueHolder(Offset.zero);
+
+  @override
+  void onDrawStart(DragStartDetails start) {
+    model._workingAnnotationObjects
+        .add(_PathAnnotationObject(Path(), model._createPathPaint()));
+    _startPt.value =
+        model._transformViewportPointToPhysicalImagePoint(start.localPosition);
+  }
+
+  @override
+  void onDrawUpdate(DragUpdateDetails update) {
+    final pathObj =
+        model._workingAnnotationObjects.last as _PathAnnotationObject;
+    final lowerRightPt =
+        model._transformViewportPointToPhysicalImagePoint(update.localPosition);
+    pathObj.path = Path()
+      ..addOval(Rect.fromLTRB(_startPt.value.dx, _startPt.value.dy,
+          lowerRightPt.dx, lowerRightPt.dy));
+    _repaintDrawing();
+  }
+}
+
+class _RectDrawControl extends _PathDrawControl {
+  _RectDrawControl({Key? key, required EditorModel model})
+      : super(key: key, model: model);
+
+  final _startPt = _ValueHolder(Offset.zero);
+
+  @override
+  void onDrawStart(DragStartDetails start) {
+    model._workingAnnotationObjects
+        .add(_PathAnnotationObject(Path(), model._createPathPaint()));
+    _startPt.value =
+        model._transformViewportPointToPhysicalImagePoint(start.localPosition);
+  }
+
+  @override
+  void onDrawUpdate(DragUpdateDetails update) {
+    final pathObj =
+        model._workingAnnotationObjects.last as _PathAnnotationObject;
+    final lowerRightPt =
+        model._transformViewportPointToPhysicalImagePoint(update.localPosition);
+    pathObj.path = Path()
+      ..addRect(Rect.fromLTRB(_startPt.value.dx, _startPt.value.dy,
+          lowerRightPt.dx, lowerRightPt.dy));
+    _repaintDrawing();
+  }
+}
+
+class _LineDrawControl extends _PathDrawControl {
+  _LineDrawControl({Key? key, required EditorModel model, this.isArrow = false})
+      : super(key: key, model: model);
+
+  final _startPt = _ValueHolder(Offset.zero);
+  final bool isArrow;
+
+  @override
+  void onDrawStart(DragStartDetails start) {
+    model._workingAnnotationObjects
+        .add(_PathAnnotationObject(Path(), model._createPathPaint()));
+    _startPt.value =
+        model._transformViewportPointToPhysicalImagePoint(start.localPosition);
+  }
+
+  @override
+  void onDrawUpdate(DragUpdateDetails update) {
+    final pathObj =
+        model._workingAnnotationObjects.last as _PathAnnotationObject;
+    final endPt =
+        model._transformViewportPointToPhysicalImagePoint(update.localPosition);
+    pathObj.path = Path()
+      ..moveTo(_startPt.value.dx, _startPt.value.dy)
+      ..lineTo(endPt.dx, endPt.dy);
+    if (isArrow) {
+      final delta = endPt - _startPt.value;
+      final angle = atan2(delta.dy, delta.dx);
+      final arrowSize = 15.0 * (model.brushSize / 5.0);
+      pathObj.path
+        ..moveTo(endPt.dx - arrowSize * cos(angle - _arrowAngle),
+            endPt.dy - arrowSize * sin(angle - _arrowAngle))
+        ..lineTo(endPt.dx, endPt.dy)
+        ..lineTo(endPt.dx - arrowSize * cos(angle + _arrowAngle),
+            endPt.dy - arrowSize * sin(angle + _arrowAngle))
+        ..close();
+    }
+
+    _repaintDrawing();
+  }
+}
+
+class _TextDrawControl extends StatelessWidget {
+  const _TextDrawControl({Key? key, required this.model}) : super(key: key);
+
+  final EditorModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    return Observer(
+      builder: (context) {
+        return SizedBox(
+          width: model.physicalRotatedCropRect.width,
+          height: model.physicalRotatedCropRect.height,
+          child: GestureDetector(
+            onTapDown: (tapDown) => _promptForText(context, tapDown),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _promptForText(
+      BuildContext context, TapDownDetails tapDown) async {
+    final text = _ValueHolder('');
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Enter text'),
+          content: SizedBox(
+            width: 360,
+            child: TextField(
+              autofocus: true,
+              onChanged: (value) => text.value = value,
+              maxLines: 3,
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.pop(context, null),
+            ),
+            TextButton(
+              child: const Text('Ok'),
+              onPressed: () => Navigator.pop(context, text.value),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null) {
+      final phyPt = model
+          ._transformViewportPointToPhysicalImagePoint(tapDown.localPosition);
+      final rotationQ = Quaternion.identity();
+      model.physicalCropRotationMatrix
+          .decompose(Vector3.zero(), rotationQ, Vector3.zero());
+      // Radians is the same value when rotated 90 or 270, so you have to multiple by the Z sign.
+      final rotation = rotationQ.radians * -(rotationQ.z.sign);
+
+      model._workingAnnotationObjects.add(_TextAnnotationObject(
+        phyPt,
+        result,
+        model.fontSize,
+        model.drawingColor,
+        model.physicalRotatedCropRect.width,
+        rotation,
+      ));
+      model.updateImage();
+    }
+  }
 }
 
 class _StubPainter extends CustomPainter {
@@ -801,4 +1316,10 @@ class _ImagePainter extends _ViewportPainter {
 
   @override
   bool shouldRepaint(covariant _ImagePainter oldDelegate) => false;
+}
+
+class _ValueHolder<T> {
+  _ValueHolder(this.value);
+
+  T value;
 }

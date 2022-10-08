@@ -1,18 +1,12 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/guides/libraries/writing-package-pages).
+## Running on web
+```
+flutter run lib/main.dart --web-renderer canvaskit --dart-define=BROWSER_IMAGE_DECODING_ENABLED=false --release
+```
+or use `--profile` instead of release. Supposedly fixed in Flutter post 3.3.x.
+See https://github.com/flutter/flutter/issues/103803.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-library-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/developing-packages).
--->
-
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+... or you have to be on Flutter 3.4+.
 
 ## Features
 

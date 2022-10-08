@@ -6,15 +6,47 @@ import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:vsc_image_editor/src/editor_model.dart';
 import 'package:zoom_widget/zoom_widget.dart';
 
+const _defaultToolNames = <Tool, String>{
+  Tool.select: 'Select/Move',
+  Tool.crop: 'Crop',
+  Tool.draw: 'Draw',
+  Tool.oval: 'Oval',
+  Tool.rectangle: 'Rectangle',
+  Tool.text: 'Text',
+  Tool.line: 'Line',
+  Tool.arrow: 'Arrow',
+};
+
+const _buttonBarGap = SizedBox(width: 12);
+
+/// A widget which allows the user to crop, rotate, and annotate an image.
 class VscImageEditor extends StatefulWidget {
   const VscImageEditor({
     Key? key,
     required this.imageBytes,
     this.controller,
+    this.fixedCropRatio,
+    this.selectedTool,
+    this.showCropCircle = false,
   }) : super(key: key);
 
+  /// The original unedited image.
   final Uint8List imageBytes;
+
+  /// A controller that can be used to retrieve the edited image.
   final VscImageEditorController? controller;
+
+  /// If non-null, cropping will be restricted to this crop ratio. For example, a
+  /// value of 1.0 will restrict the crop to a 1:1 ratio. This is a ratio of width
+  /// to height, so a 16:9 ratio = 1.7778.
+  final double? fixedCropRatio;
+
+  /// If set, this is the tool that will be selected when the editor starts.
+  final Tool? selectedTool;
+
+  /// If true, the crop rectangle will show an embedded circle which is useful
+  /// if you're setting a circle-based avatar with a [fixedCropRatio] of 1.0.
+  final bool showCropCircle;
 
   @override
   State<VscImageEditor> createState() => VscImageEditorState();
@@ -33,6 +65,17 @@ class VscImageEditorState extends State<VscImageEditor> {
   }
 
   @override
+  void didUpdateWidget(covariant VscImageEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _model.setFixedCropRatio(widget.fixedCropRatio);
+    if (widget.selectedTool != null) {
+      _model.selectTool(widget.selectedTool!);
+    }
+
+    _model.setShowCropCircle(widget.showCropCircle);
+  }
+
+  @override
   void dispose() {
     _model.dispose();
     super.dispose();
@@ -40,64 +83,69 @@ class VscImageEditorState extends State<VscImageEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return Observer(builder: (context) {
-      if (!_model.initialized) {
-        return const Center(child: CircularProgressIndicator());
-      }
+    return Observer(
+      builder: (context) {
+        if (!_model.initialized) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-      final theme = Theme.of(context);
-      return BottomNavigationBarTheme(
-        data: theme.bottomNavigationBarTheme,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  _model.setViewportSize(
-                      constraints.maxWidth, constraints.maxHeight);
-                  return Observer(builder: (context) {
-                    return Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Zoom(
-                            initTotalZoomOut: true,
-                            enableScroll: false,
-                            transformationController:
-                                _model.viewportTransformationController,
-                            child: _model.imagePainterWidget,
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTapUp: (p) =>
-                                _model.maybeSelectAnnotationAt(p.localPosition),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Stack(children: _model.viewportOverlays),
-                        ),
-                      ],
+        _model.fixedCropRatio; // Watch this
+        final theme = Theme.of(context);
+        return BottomNavigationBarTheme(
+          data: theme.bottomNavigationBarTheme,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    _model.setViewportSize(
+                        constraints.maxWidth, constraints.maxHeight);
+                    return Observer(
+                      builder: (context) {
+                        return Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Zoom(
+                                initTotalZoomOut: false,
+                                enableScroll: false,
+                                transformationController:
+                                    _model.viewportTransformationController,
+                                child: _model.imagePainterWidget,
+                              ),
+                            ),
+                            Positioned.fill(
+                              child: GestureDetector(
+                                onTapUp: (p) => _model
+                                    .maybeSelectAnnotationAt(p.localPosition),
+                              ),
+                            ),
+                            Positioned.fill(
+                              child: Stack(children: _model.viewportOverlays),
+                            ),
+                          ],
+                        );
+                      },
                     );
-                  });
-                },
+                  },
+                ),
               ),
-            ),
-            Container(
-              color: theme.colorScheme.surface,
-              height: 64,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, animation) =>
-                    ScaleTransition(scale: animation, child: child),
-                child: _buildButtons(),
+              Container(
+                color: theme.colorScheme.surface,
+                height: 64,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) =>
+                      ScaleTransition(scale: animation, child: child),
+                  child: _buildButtons(),
+                ),
               ),
-            ),
-          ],
-        ),
-      );
-    });
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildButtons() {
@@ -107,19 +155,24 @@ class VscImageEditorState extends State<VscImageEditor> {
       case Tool.crop:
         return _buildCropButtons();
       case Tool.draw:
-        return _buildDrawButtons();
-      case Tool.text:
       case Tool.oval:
       case Tool.rectangle:
-        return _buildMainButtons();
+      case Tool.line:
+      case Tool.arrow:
+        return _buildDrawButtons();
+      case Tool.text:
+        return _buildTextButtons();
     }
   }
 
   Widget _buildCropButtons() {
     return Row(
       key: const ValueKey('crop'),
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
+        const SizedBox(width: 24),
+        Icon(_model.selectedTool.icon),
+        const Spacer(),
         FloatingActionButton.small(
           onPressed: () => _model.applyCrop(),
           tooltip: 'Apply crop',
@@ -131,83 +184,41 @@ class VscImageEditorState extends State<VscImageEditor> {
           tooltip: 'Cancel cropping',
           child: const Icon(Icons.close),
         ),
+        const Spacer(),
+        // Even-out right side
+        const Icon(null),
       ],
     );
   }
 
   Widget _buildDrawButtons() {
-    const brushColor = Colors.red;
     return Row(
       key: const ValueKey('draw'),
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
+        _buttonBarGap,
+        Icon(_model.selectedTool.icon),
+        const Spacer(),
         FloatingActionButton.small(
-          onPressed: () => _model.applyDrawing(),
+          onPressed: () => _model.applyAnnotations(),
           tooltip: 'Apply drawing',
           child: const Icon(Icons.done),
         ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         FloatingActionButton.small(
-          onPressed: () => _model.discardDrawing(),
+          onPressed: () => _model.discardAnnotations(),
           tooltip: 'Discard drawing',
           child: const Icon(Icons.close),
         ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
         FloatingActionButton.small(
-          onPressed: () => _model.clearDrawing(),
-          tooltip: 'Clear drawing',
+          onPressed: () => _model.undoLastWorkingAnnotation(),
+          tooltip: 'Undo',
           child: const Icon(Icons.undo),
         ),
-        const SizedBox(width: 24),
-        PopupMenuButton(
-          itemBuilder: (context) => availableColors
-              .map(
-                (color) => PopupMenuItem(
-                  onTap: () => _model.setDrawingColor(color),
-                  child: Icon(
-                    Icons.water_drop,
-                    color: color,
-                    shadows: [
-                      if (color == Colors.white)
-                        const Shadow(
-                          color: Colors.black,
-                          blurRadius: 10,
-                        ),
-                      if (color == Colors.black)
-                        const Shadow(
-                          color: Colors.white,
-                          blurRadius: 10,
-                        ),
-                    ],
-                  ),
-                ),
-              )
-              .toList(growable: false),
-          tooltip: 'Color',
-          offset: const Offset(48, 0),
-          child: Row(
-            children: [
-              Icon(
-                Icons.color_lens,
-                color: _model.drawingColor,
-                shadows: [
-                  if (_model.drawingColor == Colors.white)
-                    const Shadow(
-                      color: Colors.black,
-                      blurRadius: 10,
-                    ),
-                  if (_model.drawingColor == Colors.black)
-                    const Shadow(
-                      color: Colors.white,
-                      blurRadius: 10,
-                    ),
-                ],
-              ),
-              const Icon(Icons.arrow_drop_up),
-            ],
-          ),
-        ),
-        const SizedBox(width: 24),
+        _buttonBarGap,
+        _buildColorPicker(),
+        _buttonBarGap,
         PopupMenuButton(
           itemBuilder: (context) => availableBrushSizes
               .map(
@@ -222,7 +233,7 @@ class VscImageEditorState extends State<VscImageEditor> {
               )
               .toList(growable: false),
           tooltip: 'Brush size',
-          offset: const Offset(48, 0),
+          offset: const Offset(96, 0),
           child: Row(
             children: const [
               Icon(Icons.brush),
@@ -230,7 +241,121 @@ class VscImageEditorState extends State<VscImageEditor> {
             ],
           ),
         ),
+        const Spacer(),
+        // Even-out right side
+        const Icon(null),
       ],
+    );
+  }
+
+  Widget _buildTextButtons() {
+    return Row(
+      key: const ValueKey('text'),
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: [
+        _buttonBarGap,
+        Icon(_model.selectedTool.icon),
+        const Spacer(),
+        FloatingActionButton.small(
+          onPressed: () => _model.applyAnnotations(),
+          tooltip: 'Apply',
+          child: const Icon(Icons.done),
+        ),
+        _buttonBarGap,
+        FloatingActionButton.small(
+          onPressed: () => _model.discardAnnotations(),
+          tooltip: 'Discard',
+          child: const Icon(Icons.close),
+        ),
+        _buttonBarGap,
+        FloatingActionButton.small(
+          onPressed: () => _model.undoLastWorkingAnnotation(),
+          tooltip: 'Undo',
+          child: const Icon(Icons.undo),
+        ),
+        _buttonBarGap,
+        _buildColorPicker(),
+        _buttonBarGap,
+        PopupMenuButton(
+          itemBuilder: (context) => availableFontSizes
+              .map(
+                (size) => PopupMenuItem(
+                  onTap: () => _model.setFontSize(size),
+                  child: Text(
+                    'A',
+                    style: TextStyle(
+                        fontSize: size / 3,
+                        fontWeight: FontWeight.bold,
+                        color: (_model.fontSize == size) ? Colors.green : null),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+          tooltip: 'Font size',
+          offset: const Offset(96, 0),
+          child: Row(
+            children: const [
+              Icon(Icons.format_size),
+              Icon(Icons.arrow_drop_up),
+            ],
+          ),
+        ),
+        const Spacer(),
+        // Even-out right side
+        const Icon(null),
+      ],
+    );
+  }
+
+  PopupMenuButton<dynamic> _buildColorPicker() {
+    return PopupMenuButton(
+      itemBuilder: (context) => availableColors
+          .map(
+            (color) => PopupMenuItem(
+              onTap: () => _model.setDrawingColor(color),
+              child: Icon(
+                Icons.water_drop,
+                color: color,
+                shadows: [
+                  if (color == Colors.white || color == Colors.yellow)
+                    const Shadow(
+                      color: Colors.black,
+                      blurRadius: 10,
+                    ),
+                  if (color == Colors.black)
+                    const Shadow(
+                      color: Colors.white,
+                      blurRadius: 10,
+                    ),
+                ],
+              ),
+            ),
+          )
+          .toList(growable: false),
+      tooltip: 'Color',
+      offset: const Offset(96, 0),
+      child: Row(
+        children: [
+          Icon(
+            Icons.color_lens,
+            color: _model.drawingColor,
+            shadows: [
+              if (_model.drawingColor == Colors.white ||
+                  _model.drawingColor == Colors.yellow)
+                const Shadow(
+                  color: Colors.black,
+                  blurRadius: 10,
+                ),
+              if (_model.drawingColor == Colors.black)
+                const Shadow(
+                  color: Colors.white,
+                  blurRadius: 10,
+                ),
+            ],
+          ),
+          const Icon(Icons.arrow_drop_up),
+        ],
+      ),
     );
   }
 
@@ -238,7 +363,13 @@ class VscImageEditorState extends State<VscImageEditor> {
     final toolItems = Tool.values
         .map(
           (tool) => PopupMenuItem(
-            child: Icon(tool.icon),
+            child: Row(
+              children: [
+                Icon(tool.icon),
+                const SizedBox(width: 8),
+                Text(_defaultToolNames[tool] ?? ''),
+              ],
+            ),
             onTap: () => _model.selectTool(tool),
           ),
         )
@@ -282,7 +413,7 @@ class VscImageEditorState extends State<VscImageEditor> {
         PopupMenuButton(
           itemBuilder: (context) => toolItems,
           tooltip: 'Tools',
-          offset: const Offset(48, 0),
+          offset: const Offset(32, 0),
           child: Row(
             children: [
               Icon(_model.selectedTool.icon),
@@ -308,7 +439,7 @@ class VscImageEditorState extends State<VscImageEditor> {
         PopupMenuButton(
           itemBuilder: (context) => zoomItems,
           tooltip: 'Zoom',
-          offset: const Offset(48, 0),
+          offset: const Offset(150, 0),
           child: Row(
             children: [
               Text('${(_model.zoomScale * 100).toStringAsFixed(1)}%'),
