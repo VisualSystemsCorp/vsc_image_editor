@@ -232,7 +232,8 @@ abstract class EditorModelBase with Store {
   bool isModified() {
     return !_physicalCropRotationMatrix.isIdentity() ||
         _physicalNonRotatedCropRect != _fullImageNonRotatedPhysicalRect ||
-        _annotationObjects.isNotEmpty;
+        _annotationObjects.isNotEmpty ||
+        _workingAnnotationObjects.isNotEmpty;
   }
 
   @action
@@ -572,7 +573,13 @@ abstract class EditorModelBase with Store {
     selectTool(Tool.select, cancelCropping: false);
   }
 
+  /// Gets the edited image. If drawing annotations is in progress, the working annotations
+  /// are applied to the image. This way the user gets an image which reflects what they're seeing.
   Future<ui.Image> getEditedUiImage() async {
+    if (_workingAnnotationObjects.isNotEmpty) {
+      applyAnnotations();
+    }
+
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     _imagePainter.paint(canvas, Size.zero);
