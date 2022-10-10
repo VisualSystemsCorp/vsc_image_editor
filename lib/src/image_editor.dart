@@ -459,4 +459,6 @@ class VscImageEditorController {
   EditorModel? model;
 
   Future<ui.Image?> getEditedUiImage() async => model?.getEditedUiImage();
+
+  bool isModified() => model?.isModified() ?? false;
 }

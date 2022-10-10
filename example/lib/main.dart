@@ -142,7 +142,11 @@ class _ExampleState extends State<_Example> {
             child: Scaffold(
               appBar: AppBar(
                 leading: CloseButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () async {
+                    if (await _isOkToClose(context, controller)) {
+                      Navigator.pop(context);
+                    }
+                  },
                 ),
                 primary: false,
                 title: const Text('Edit Image'),
@@ -171,6 +175,42 @@ class _ExampleState extends State<_Example> {
         );
       },
     );
+  }
+
+  Future<bool> _isOkToClose(
+      BuildContext context, VscImageEditorController controller) async {
+    if (!controller.isModified()) {
+      return true;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unsaved Changes'),
+        content: const Text(
+            'You have made changes, but not yet saved them. What do you want to do?'),
+        actions: [
+          TextButton(
+            child: const Text('Keep Editing'),
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          TextButton(
+            child: const Text('Discard Changes'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+          TextButton(
+              child: const Text('Save Changes'),
+              onPressed: () async {
+                await _saveImage(context, controller);
+                if (mounted) {
+                  Navigator.pop(context, true);
+                }
+              }),
+        ],
+      ),
+    );
+
+    return result ?? false;
   }
 
   Future<void> _saveImage(

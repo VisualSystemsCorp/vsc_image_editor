@@ -94,9 +94,12 @@ abstract class EditorModelBase with Store {
   bool _showCropCircle = false;
 
   ui.Rect get fullImageRotatedPhysicalRect => MatrixUtils.transformRect(
-      _physicalCropRotationMatrix,
-      Rect.fromLTWH(0, 0, _fullImageNonRotatedPhysicalWidth,
-          _fullImageNonRotatedPhysicalHeight));
+      _physicalCropRotationMatrix, _fullImageNonRotatedPhysicalRect);
+
+  ui.Rect get _fullImageNonRotatedPhysicalRect {
+    return Rect.fromLTWH(0, 0, _fullImageNonRotatedPhysicalWidth,
+        _fullImageNonRotatedPhysicalHeight);
+  }
 
   double get fullImageRotatedPhysicalWidth =>
       fullImageRotatedPhysicalRect.width;
@@ -224,6 +227,12 @@ abstract class EditorModelBase with Store {
     debugPrint(
         'viewportTransformationController matrix: translation: (${translation.x}, ${translation.y}), '
         'scale: ${scale.x}');
+  }
+
+  bool isModified() {
+    return !_physicalCropRotationMatrix.isIdentity() ||
+        _physicalNonRotatedCropRect != _fullImageNonRotatedPhysicalRect ||
+        _annotationObjects.isNotEmpty;
   }
 
   @action
