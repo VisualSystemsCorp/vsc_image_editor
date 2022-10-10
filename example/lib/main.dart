@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:chunked_stream/chunked_stream.dart';
 import 'package:cross_file/cross_file.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -42,8 +44,6 @@ class _ExampleState extends State<_Example> {
   static const _cropRatios = [null, 1.0, 1.7778];
   static const _selectableTools = [Tool.select, Tool.crop, Tool.draw];
 
-  Uint8List? _imageBytes;
-  VscImageEditorController controller = VscImageEditorController();
   final _cropRatioSelections = [true, false, false];
   final _toolSelections = [true, false, false];
   Tool? _selectedTool = _selectableTools[0];
@@ -51,121 +51,130 @@ class _ExampleState extends State<_Example> {
   bool _showCropCircle = false;
 
   @override
-  void initState() {
-    super.initState();
-    _loader();
-  }
-
-  Future<void> _loader() async {
-    final imageByteData = await rootBundle.load('assets/Test-12MP-image.jpg');
-    _imageBytes = imageByteData.buffer.asUint8List();
-
-    setState(() {});
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final buttonTextStyle = TextStyle(
-      color: colorScheme.onPrimary,
-    );
-
-    final isMobile = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('VscImageEditor'),
-        actions: [
-          Expanded(
-            flex: 0,
-            child: Row(
-              children: [
-                ToggleButtons(
-                  isSelected: _toolSelections,
-                  onPressed: (index) {
-                    _toolSelections.setAll(0, [false, false, false]);
-                    _toolSelections[index] = true;
-                    _selectedTool = _selectableTools[index];
-                    setState(() {});
-                  },
-                  selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
-                  children: _selectableTools
-                      .map((tool) =>
-                          Icon(tool.icon, color: colorScheme.onPrimary))
-                      .toList(growable: false),
-                ),
-                VerticalDivider(
-                  color: colorScheme.onPrimary,
-                  indent: 10,
-                  endIndent: 10,
-                ),
-                ToggleButtons(
-                  isSelected: _cropRatioSelections,
-                  onPressed: (index) {
-                    _cropRatioSelections.setAll(0, [false, false, false]);
-                    _cropRatioSelections[index] = true;
-                    _cropRatio = _cropRatios[index];
-                    _showCropCircle = _cropRatio == 1;
-                    setState(() {});
-                  },
-                  selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
-                  children: [
-                    Text('Free', style: buttonTextStyle),
-                    Text('1:1', style: buttonTextStyle),
-                    Text('16:9', style: buttonTextStyle),
-                  ],
-                ),
-                VerticalDivider(
-                  color: colorScheme.onPrimary,
-                  indent: 10,
-                  endIndent: 10,
-                ),
-                // // Builder is needed to get the correct context for _share().
-                // if (isMobile)
-                //   Builder(
-                //     builder: (context) {
-                //       return TextButton(
-                //         onPressed: () => _share(context),
-                //         child: Text(
-                //           'Share',
-                //           style: buttonTextStyle,
-                //         ),
-                //       );
-                //     },
-                //   ),
-                // if (!isMobile)
-                TextButton(
-                  onPressed: () => _save(context),
-                  child: Text(
-                    'Save',
-                    style: buttonTextStyle,
-                  ),
-                ),
-
-                // Avoid the "Debug" banner
-                if (!isMobile) const SizedBox(width: 24),
+        title: const Text('VscImageEditor Example'),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Fixed Crop Ratio'),
+            ToggleButtons(
+              isSelected: _cropRatioSelections,
+              onPressed: (index) {
+                _cropRatioSelections.setAll(0, [false, false, false]);
+                _cropRatioSelections[index] = true;
+                _cropRatio = _cropRatios[index];
+                setState(() {});
+              },
+              // selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
+              children: const [
+                Text('None'),
+                Text('1:1'),
+                Text('16:9'),
               ],
             ),
-          ),
-        ],
-      ),
-      // "medium" provides better scaling results than "high" - see https://github.com/flutter/flutter/issues/79645#issuecomment-819920763.
-      body: _imageBytes == null
-          ? const SizedBox.shrink()
-          : VscImageEditor(
-              imageBytes: _imageBytes!,
-              controller: controller,
-              fixedCropRatio: 1.0,
-              selectedTool: Tool.crop,
-              showCropCircle: true,
-
-              // fixedCropRatio: _cropRatio,
-              // selectedTool: _selectedTool,
-              // showCropCircle: _showCropCircle,
+            const SizedBox(height: 24),
+            const Text('Initial Tool Selection'),
+            ToggleButtons(
+              isSelected: _toolSelections,
+              onPressed: (index) {
+                _toolSelections.setAll(0, [false, false, false]);
+                _toolSelections[index] = true;
+                _selectedTool = _selectableTools[index];
+                setState(() {});
+              },
+              children: _selectableTools
+                  .map((tool) => Icon(tool.icon))
+                  .toList(growable: false),
             ),
+            const SizedBox(height: 24),
+            const Text('Show Crop Circle:'),
+            Switch(
+              value: _showCropCircle,
+              onChanged: (value) => setState(() {
+                _showCropCircle = value;
+              }),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => _pickFileAndEdit(context),
+              child: const Text('Edit an Image'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Future<void> _save(BuildContext context) async {
+  Future<void> _pickFileAndEdit(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withReadStream: true,
+    );
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+
+    var imageBytes = await readByteStream(result.files[0].readStream!);
+    // Ensure the Uint8List is a proper sublist. See remark on readByteStream().
+    imageBytes = imageBytes.sublist(imageBytes.offsetInBytes,
+        imageBytes.offsetInBytes + imageBytes.lengthInBytes);
+
+    if (mounted) {
+      await _showEditDialog(context, imageBytes);
+    }
+  }
+
+  Future<void> _showEditDialog(
+      BuildContext context, Uint8List imageBytes) async {
+    VscImageEditorController controller = VscImageEditorController();
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return FractionallySizedBox(
+          widthFactor: 1.0,
+          heightFactor: 1.0,
+          child: Card(
+            child: Scaffold(
+              appBar: AppBar(
+                leading: CloseButton(
+                  onPressed: () => Navigator.pop(context),
+                ),
+                primary: false,
+                title: const Text('Edit Image'),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.save),
+                    tooltip: 'Save image',
+                    onPressed: () async {
+                      await _saveImage(context, controller);
+                      if (mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              body: VscImageEditor(
+                imageBytes: imageBytes,
+                controller: controller,
+                fixedCropRatio: _cropRatio,
+                selectedTool: _selectedTool,
+                showCropCircle: _showCropCircle,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _saveImage(
+      BuildContext context, VscImageEditorController controller) async {
     final box = context.findRenderObject() as RenderBox?;
     final navigator = Navigator.of(context);
 
@@ -191,15 +200,16 @@ class _ExampleState extends State<_Example> {
     // Wait for dialog animations to complete.
     await Future.delayed(const Duration(milliseconds: 100));
     try {
-      await _saveWhileDialogDisplayed(box);
+      await _saveWhileDialogDisplayed(box, controller);
     } finally {
       // Remove the dialog
       navigator.pop();
     }
   }
 
-  Future<void> _saveWhileDialogDisplayed(RenderBox? box) async {
-    final encodedBytes = await _getEncodedBytes();
+  Future<void> _saveWhileDialogDisplayed(
+      RenderBox? box, VscImageEditorController controller) async {
+    final encodedBytes = await _getEncodedBytes(controller);
     if (kIsWeb) {
       final path = await FileSaver.instance.saveFile(
         'Test-image-out.jpg',
@@ -228,7 +238,8 @@ class _ExampleState extends State<_Example> {
     }
   }
 
-  Future<List<int>> _getEncodedBytes() async {
+  Future<List<int>> _getEncodedBytes(
+      VscImageEditorController controller) async {
     final image = await controller.getEditedUiImage();
     if (image == null) {
       throw Exception('Image is null');
@@ -246,6 +257,7 @@ class _ExampleState extends State<_Example> {
     return encodedBytes;
   }
 
+/*
   // TODO Not working yet with share_plus 4.5.3 - stack overflow on linux, "this.share is not a function" error on web
   //  Android: Failed assertion: line 111 pos 12: 'paths.every((element) => element.isNotEmpty)': is not true.
   Future<void> _share(BuildContext context) async {
@@ -266,4 +278,5 @@ class _ExampleState extends State<_Example> {
 
     debugPrint('Shared to ${result.status.name}');
   }
+ */
 }

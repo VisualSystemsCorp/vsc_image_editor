@@ -111,14 +111,12 @@ class VscImageEditorState extends State<VscImageEditor> {
                       builder: (context) {
                         return Stack(
                           children: [
-                            Positioned.fill(
-                              child: Zoom(
-                                initTotalZoomOut: false,
-                                enableScroll: false,
-                                transformationController:
-                                    _model.viewportTransformationController,
-                                child: _model.imagePainterWidget,
-                              ),
+                            Zoom(
+                              initTotalZoomOut: false,
+                              enableScroll: false,
+                              transformationController:
+                                  _model.viewportTransformationController,
+                              child: _model.imagePainterWidget,
                             ),
                             Positioned.fill(
                               child: GestureDetector(

@@ -169,6 +169,11 @@ abstract class EditorModelBase with Store {
     viewportTransformationController.addListener(() {
       _zoomScale = viewportTransformationController.value.getMaxScaleOnAxis();
       _viewportTransformationMatrix = viewportTransformationController.value;
+      // _debugZoomControllerMatrix();
+      if (_selectedTool == Tool.crop) {
+        // debugPrint('Recentering....');
+        _centerCropRect();
+      }
     });
 
     final codec = await ui.instantiateImageCodec(imageBytes);
@@ -178,7 +183,7 @@ abstract class EditorModelBase with Store {
     _fullImageNonRotatedPhysicalHeight = _uiImage!.height.toDouble();
     _physicalNonRotatedCropRect = ui.Rect.fromLTWH(0, 0,
         _fullImageNonRotatedPhysicalWidth, _fullImageNonRotatedPhysicalHeight);
-
+    // debugPrint('initialized');
     _initialized = true;
   }
 
@@ -209,8 +214,21 @@ abstract class EditorModelBase with Store {
     }
   }
 
+  // ignore: unused_element
+  void _debugZoomControllerMatrix() {
+    final translation = Vector3.zero();
+    final rotation = Quaternion.identity();
+    final scale = Vector3.zero();
+    viewportTransformationController.value
+        .decompose(translation, rotation, scale);
+    debugPrint(
+        'viewportTransformationController matrix: translation: (${translation.x}, ${translation.y}), '
+        'scale: ${scale.x}');
+  }
+
   @action
   void selectTool(Tool tool, {bool cancelCropping = true}) {
+    // debugPrint('Selecting tool $tool');
     if (tool == _selectedTool) return;
     if (_viewport.isEmpty) {
       // Do it after viewport is set
@@ -288,6 +306,7 @@ abstract class EditorModelBase with Store {
   /// Scale image to fit the viewport and reset the pan.
   @action
   void scaleToFitViewport() {
+    // debugPrint('Scaling to fit viewport');
     final scale = min(_viewport.width / physicalRotatedCropRect.width,
         _viewport.height / physicalRotatedCropRect.height);
     setScale(scale);
@@ -329,19 +348,29 @@ abstract class EditorModelBase with Store {
   void startCrop() {
     // Reset any current crop
     _savedPhysicalNonRotatedCropRect = _physicalNonRotatedCropRect;
+    // Clear crop which also zooms so full image fits viewport, and resets pan.
     clearCrop();
 
-    // Zoom so full image fits viewport, and reset pan.
-    scaleToFitViewport();
+    _centerCropRect();
 
+    _viewportOverlays
+      ..clear()
+      ..add(_CropControl(model: this as EditorModel));
+  }
+
+  void _centerCropRect() {
     final imageViewportRect = viewportImageRect;
     final cropRatio = _fixedCropRatio;
     if (cropRatio == null) {
       final insetX = imageViewportRect.width * 0.05;
       final insetY = imageViewportRect.height * 0.05;
       _updateCropRect(
-          ui.Rect.fromLTRB(insetX, insetY, imageViewportRect.width - insetX,
-              imageViewportRect.height - insetY),
+          ui.Rect.fromLTWH(
+            imageViewportRect.left + insetX,
+            imageViewportRect.top + insetY,
+            imageViewportRect.width * 0.90,
+            imageViewportRect.height * 0.90,
+          ),
           _Corner.bottomRight);
     } else {
       var targetWidth = imageViewportRect.width * 0.90;
@@ -355,20 +384,16 @@ abstract class EditorModelBase with Store {
       assert(targetHeight <= imageViewportRect.height);
 
       // Center the crop rect.
-      // _controlCropRect = ui.Rect.fromLTWH((imageViewportRect.width - targetWidth) / 2,
-      //     (imageViewportRect.height - targetHeight) / 2, targetWidth, targetHeight);
       _updateCropRect(
           ui.Rect.fromLTWH(
-              (imageViewportRect.width - targetWidth) / 2,
-              (imageViewportRect.height - targetHeight) / 2,
+              imageViewportRect.left +
+                  (imageViewportRect.width - targetWidth) / 2,
+              imageViewportRect.top +
+                  (imageViewportRect.height - targetHeight) / 2,
               targetWidth,
               targetHeight),
           _Corner.topLeft);
     }
-
-    _viewportOverlays
-      ..clear()
-      ..add(_CropControl(model: this as EditorModel));
   }
 
   ui.Rect get viewportImageRect {
