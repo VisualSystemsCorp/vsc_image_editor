@@ -573,9 +573,13 @@ abstract class EditorModelBase with Store {
     selectTool(Tool.select, cancelCropping: false);
   }
 
-  /// Gets the edited image. If drawing annotations is in progress, the working annotations
+  /// Gets the edited image. If drawing annotations is in progress, the current crop or working annotations
   /// are applied to the image. This way the user gets an image which reflects what they're seeing.
   Future<ui.Image> getEditedUiImage() async {
+    if (_selectedTool == Tool.crop) {
+      applyCrop();
+    }
+
     if (_workingAnnotationObjects.isNotEmpty) {
       applyAnnotations();
     }

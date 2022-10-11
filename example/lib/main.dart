@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:chunked_stream/chunked_stream.dart';
 import 'package:cross_file/cross_file.dart';
@@ -49,6 +50,7 @@ class _ExampleState extends State<_Example> {
   Tool? _selectedTool = _selectableTools[0];
   double? _cropRatio = _cropRatios[0];
   bool _showCropCircle = false;
+  Uint8List? _lastEditedImage;
 
   @override
   Widget build(BuildContext context) {
@@ -56,10 +58,11 @@ class _ExampleState extends State<_Example> {
       appBar: AppBar(
         title: const Text('VscImageEditor Example'),
       ),
-      body: Center(
+      body: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const SizedBox(height: 24),
             const Text('Fixed Crop Ratio'),
             ToggleButtons(
               isSelected: _cropRatioSelections,
@@ -91,7 +94,7 @@ class _ExampleState extends State<_Example> {
                   .toList(growable: false),
             ),
             const SizedBox(height: 24),
-            const Text('Show Crop Circle:'),
+            const Text('Show Crop Circle'),
             Switch(
               value: _showCropCircle,
               onChanged: (value) => setState(() {
@@ -103,6 +106,13 @@ class _ExampleState extends State<_Example> {
               onPressed: () => _pickFileAndEdit(context),
               child: const Text('Edit an Image'),
             ),
+            const SizedBox(height: 24),
+            if (_lastEditedImage != null) const Text('Last image edited'),
+            if (_lastEditedImage != null)
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Image.memory(_lastEditedImage!),
+              ),
           ],
         ),
       ),
@@ -294,6 +304,9 @@ class _ExampleState extends State<_Example> {
     final internalImage =
         img.Image.fromBytes(image.width, image.height, rawBytes);
     final encodedBytes = img.encodeJpg(internalImage, quality: 99);
+    setState(() {
+      _lastEditedImage = Uint8List.fromList(encodedBytes);
+    });
     return encodedBytes;
   }
 
