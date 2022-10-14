@@ -50,6 +50,7 @@ class _ExampleState extends State<_Example> {
   Tool? _selectedTool = _selectableTools[0];
   double? _cropRatio = _cropRatios[0];
   bool _showCropCircle = false;
+  bool _viewOnly = false;
   Uint8List? _lastEditedImage;
 
   @override
@@ -59,61 +60,71 @@ class _ExampleState extends State<_Example> {
         title: const Text('VscImageEditor Example'),
       ),
       body: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 24),
-            const Text('Fixed Crop Ratio'),
-            ToggleButtons(
-              isSelected: _cropRatioSelections,
-              onPressed: (index) {
-                _cropRatioSelections.setAll(0, [false, false, false]);
-                _cropRatioSelections[index] = true;
-                _cropRatio = _cropRatios[index];
-                setState(() {});
-              },
-              // selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
-              children: const [
-                Text('None'),
-                Text('1:1'),
-                Text('16:9'),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const Text('Initial Tool Selection'),
-            ToggleButtons(
-              isSelected: _toolSelections,
-              onPressed: (index) {
-                _toolSelections.setAll(0, [false, false, false]);
-                _toolSelections[index] = true;
-                _selectedTool = _selectableTools[index];
-                setState(() {});
-              },
-              children: _selectableTools
-                  .map((tool) => Icon(tool.icon))
-                  .toList(growable: false),
-            ),
-            const SizedBox(height: 24),
-            const Text('Show Crop Circle'),
-            Switch(
-              value: _showCropCircle,
-              onChanged: (value) => setState(() {
-                _showCropCircle = value;
-              }),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => _pickFileAndEdit(context),
-              child: const Text('Edit an Image'),
-            ),
-            const SizedBox(height: 24),
-            if (_lastEditedImage != null) const Text('Last image edited'),
-            if (_lastEditedImage != null)
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Image.memory(_lastEditedImage!),
+        child: Align(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 24),
+              const Text('Fixed Crop Ratio'),
+              ToggleButtons(
+                isSelected: _cropRatioSelections,
+                onPressed: (index) {
+                  _cropRatioSelections.setAll(0, [false, false, false]);
+                  _cropRatioSelections[index] = true;
+                  _cropRatio = _cropRatios[index];
+                  setState(() {});
+                },
+                // selectedBorderColor: colorScheme.onPrimary.withOpacity(0.54),
+                children: const [
+                  Text('None'),
+                  Text('1:1'),
+                  Text('16:9'),
+                ],
               ),
-          ],
+              const SizedBox(height: 24),
+              const Text('Initial Tool Selection'),
+              ToggleButtons(
+                isSelected: _toolSelections,
+                onPressed: (index) {
+                  _toolSelections.setAll(0, [false, false, false]);
+                  _toolSelections[index] = true;
+                  _selectedTool = _selectableTools[index];
+                  setState(() {});
+                },
+                children: _selectableTools
+                    .map((tool) => Icon(tool.icon))
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: 24),
+              const Text('Show Crop Circle'),
+              Switch(
+                value: _showCropCircle,
+                onChanged: (value) => setState(() {
+                  _showCropCircle = value;
+                }),
+              ),
+              const SizedBox(height: 24),
+              const Text('View-only'),
+              Switch(
+                value: _viewOnly,
+                onChanged: (value) => setState(() {
+                  _viewOnly = value;
+                }),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => _pickFileAndEdit(context),
+                child: const Text('Edit an Image'),
+              ),
+              const SizedBox(height: 24),
+              if (_lastEditedImage != null) const Text('Last image edited'),
+              if (_lastEditedImage != null)
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Image.memory(_lastEditedImage!),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -159,18 +170,19 @@ class _ExampleState extends State<_Example> {
                   },
                 ),
                 primary: false,
-                title: const Text('Edit Image'),
+                title: Text(_viewOnly ? 'View Image' : 'Edit Image'),
                 actions: [
-                  IconButton(
-                    icon: const Icon(Icons.save),
-                    tooltip: 'Save image',
-                    onPressed: () async {
-                      await _saveImage(context, controller);
-                      if (mounted) {
-                        Navigator.pop(context);
-                      }
-                    },
-                  ),
+                  if (!_viewOnly)
+                    IconButton(
+                      icon: const Icon(Icons.save),
+                      tooltip: 'Save image',
+                      onPressed: () async {
+                        await _saveImage(context, controller);
+                        if (mounted) {
+                          Navigator.pop(context);
+                        }
+                      },
+                    ),
                 ],
               ),
               body: VscImageEditor(
@@ -179,6 +191,7 @@ class _ExampleState extends State<_Example> {
                 fixedCropRatio: _cropRatio,
                 selectedTool: _selectedTool,
                 showCropCircle: _showCropCircle,
+                viewOnly: _viewOnly,
               ),
             ),
           ),

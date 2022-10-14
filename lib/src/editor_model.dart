@@ -65,6 +65,7 @@ abstract class EditorModelBase with Store {
     double? fixedCropRatio,
     Tool? selectedTool,
     bool showCropCircle = false,
+    this.viewOnly = false,
   }) {
     _fixedCropRatio = fixedCropRatio;
     _showCropCircle = showCropCircle;
@@ -77,6 +78,7 @@ abstract class EditorModelBase with Store {
   late final CustomPainter _imagePainter;
   late final Widget imagePainterWidget;
   late final Widget _selectedObjectControl;
+  final bool viewOnly;
 
   @readonly
   ui.Image? _uiImage;
@@ -243,6 +245,11 @@ abstract class EditorModelBase with Store {
     if (_viewport.isEmpty) {
       // Do it after viewport is set
       _selectedToolPendingViewport = tool;
+      return;
+    }
+
+    if (viewOnly) {
+      _selectedTool = Tool.select;
       return;
     }
 

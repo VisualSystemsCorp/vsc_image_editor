@@ -28,6 +28,7 @@ class VscImageEditor extends StatefulWidget {
     this.fixedCropRatio,
     this.selectedTool,
     this.showCropCircle = false,
+    this.viewOnly = false,
   }) : super(key: key);
 
   /// The original unedited image.
@@ -48,6 +49,9 @@ class VscImageEditor extends StatefulWidget {
   /// if you're setting a circle-based avatar with a [fixedCropRatio] of 1.0.
   final bool showCropCircle;
 
+  /// True if you just want to view the image.
+  final bool viewOnly;
+
   @override
   State<VscImageEditor> createState() => VscImageEditorState();
 }
@@ -65,6 +69,7 @@ class VscImageEditorState extends State<VscImageEditor> {
       fixedCropRatio: widget.fixedCropRatio,
       selectedTool: widget.selectedTool,
       showCropCircle: widget.showCropCircle,
+      viewOnly: widget.viewOnly,
     );
     widget.controller?.model = _model;
   }
@@ -413,32 +418,36 @@ class VscImageEditorState extends State<VscImageEditor> {
       key: const ValueKey('main'),
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        PopupMenuButton(
-          itemBuilder: (context) => toolItems,
-          tooltip: 'Tools',
-          offset: const Offset(32, 0),
-          child: Row(
-            children: [
-              Icon(_model.selectedTool.icon),
-              const Icon(Icons.arrow_drop_up),
-            ],
+        if (!_model.viewOnly)
+          PopupMenuButton(
+            itemBuilder: (context) => toolItems,
+            tooltip: 'Tools',
+            offset: const Offset(32, 0),
+            child: Row(
+              children: [
+                Icon(_model.selectedTool.icon),
+                const Icon(Icons.arrow_drop_up),
+              ],
+            ),
           ),
-        ),
-        IconButton(
-          onPressed: () => _model.rotate90Left(),
-          icon: const Icon(Icons.rotate_90_degrees_ccw_outlined),
-          tooltip: 'Rotate left',
-        ),
-        IconButton(
-          onPressed: () => _model.rotate90Right(),
-          icon: const Icon(Icons.rotate_90_degrees_cw_outlined),
-          tooltip: 'Rotate right',
-        ),
-        IconButton(
-          onPressed: () => _model.clearCrop(),
-          icon: const Icon(Icons.fullscreen),
-          tooltip: 'Clear crop',
-        ),
+        if (!_model.viewOnly)
+          IconButton(
+            onPressed: () => _model.rotate90Left(),
+            icon: const Icon(Icons.rotate_90_degrees_ccw_outlined),
+            tooltip: 'Rotate left',
+          ),
+        if (!_model.viewOnly)
+          IconButton(
+            onPressed: () => _model.rotate90Right(),
+            icon: const Icon(Icons.rotate_90_degrees_cw_outlined),
+            tooltip: 'Rotate right',
+          ),
+        if (!_model.viewOnly)
+          IconButton(
+            onPressed: () => _model.clearCrop(),
+            icon: const Icon(Icons.fullscreen),
+            tooltip: 'Clear crop',
+          ),
         PopupMenuButton(
           itemBuilder: (context) => zoomItems,
           tooltip: 'Zoom',
