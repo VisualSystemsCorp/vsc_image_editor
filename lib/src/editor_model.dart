@@ -1048,24 +1048,18 @@ abstract class _PathDrawControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Observer(
-      builder: (context) {
-        return SizedBox(
-          width: model.physicalRotatedCropRect.width,
-          height: model.physicalRotatedCropRect.height,
-          child: GestureDetector(
-            onPanStart: onDrawStart,
-            onPanUpdate: onDrawUpdate,
-            child: CustomPaint(
-              // TODO I can't explain why, but this do-nothing painter is required to get the image to update while drawing.
-              //  It may be because it repaints on the _painterNotifier change, but not sure.
-              //  Also, just calling model.updateImage() in onPanUpdate doesn't cause the drawing to repaint until
-              //  the pointer moves out of the window, or over a button.
-              painter: _StubPainter(_painterNotifier),
-            ),
-          ),
-        );
-      },
+    return Positioned.fill(
+      child: GestureDetector(
+        onPanStart: onDrawStart,
+        onPanUpdate: onDrawUpdate,
+        child: CustomPaint(
+          // TODO I can't explain why, but this do-nothing painter is required to get the image to update while drawing.
+          //  It may be because it repaints on the _painterNotifier change, but not sure.
+          //  Also, just calling model.updateImage() in onPanUpdate doesn't cause the drawing to repaint until
+          //  the pointer moves out of the window, or over a button.
+          painter: _StubPainter(_painterNotifier),
+        ),
+      ),
     );
   }
 
@@ -1204,16 +1198,10 @@ class _TextDrawControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Observer(
-      builder: (context) {
-        return SizedBox(
-          width: model.physicalRotatedCropRect.width,
-          height: model.physicalRotatedCropRect.height,
-          child: GestureDetector(
-            onTapDown: (tapDown) => _promptForText(context, tapDown),
-          ),
-        );
-      },
+    return Positioned.fill(
+      child: GestureDetector(
+        onTapDown: (tapDown) => _promptForText(context, tapDown),
+      ),
     );
   }
 
