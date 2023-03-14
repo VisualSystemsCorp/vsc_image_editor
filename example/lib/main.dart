@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:chunked_stream/chunked_stream.dart';
 import 'package:cross_file/cross_file.dart';
@@ -10,8 +9,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:vsc_image_editor/vsc_image_editor.dart';
 
@@ -313,9 +312,14 @@ class _ExampleState extends State<_Example> {
       throw Exception('ByteData is null');
     }
 
-    final rawBytes = byteData.buffer.asUint8List();
-    final internalImage =
-        img.Image.fromBytes(image.width, image.height, rawBytes);
+    final rawBytes = byteData.buffer;
+    final internalImage = img.Image.fromBytes(
+      width: image.width,
+      height: image.height,
+      bytes: rawBytes,
+      format: img.Format.uint8,
+      order: img.ChannelOrder.rgba,
+    );
     final encodedBytes = img.encodeJpg(internalImage, quality: 99);
     setState(() {
       _lastEditedImage = Uint8List.fromList(encodedBytes);
