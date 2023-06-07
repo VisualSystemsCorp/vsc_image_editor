@@ -197,21 +197,22 @@ mixin _$EditorModel on EditorModelBase, Store {
     });
   }
 
-  late final _$_viewportOverlaysAtom =
-      Atom(name: 'EditorModelBase._viewportOverlays', context: context);
+  late final _$_viewportOverlaysCounterAtom =
+      Atom(name: 'EditorModelBase._viewportOverlaysCounter', context: context);
 
-  ObservableList<Widget> get viewportOverlays {
-    _$_viewportOverlaysAtom.reportRead();
-    return super._viewportOverlays;
+  int get viewportOverlaysCounter {
+    _$_viewportOverlaysCounterAtom.reportRead();
+    return super._viewportOverlaysCounter;
   }
 
   @override
-  ObservableList<Widget> get _viewportOverlays => viewportOverlays;
+  int get _viewportOverlaysCounter => viewportOverlaysCounter;
 
   @override
-  set _viewportOverlays(ObservableList<Widget> value) {
-    _$_viewportOverlaysAtom.reportWrite(value, super._viewportOverlays, () {
-      super._viewportOverlays = value;
+  set _viewportOverlaysCounter(int value) {
+    _$_viewportOverlaysCounterAtom
+        .reportWrite(value, super._viewportOverlaysCounter, () {
+      super._viewportOverlaysCounter = value;
     });
   }
 

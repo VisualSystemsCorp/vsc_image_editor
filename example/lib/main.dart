@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chunked_stream/chunked_stream.dart';
-import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
@@ -164,7 +163,7 @@ class _ExampleState extends State<_Example> {
                 leading: CloseButton(
                   onPressed: () async {
                     if (await _isOkToClose(context, controller)) {
-                      Navigator.pop(context);
+                      if (context.mounted) Navigator.pop(context);
                     }
                   },
                 ),
@@ -172,15 +171,19 @@ class _ExampleState extends State<_Example> {
                 title: Text(_viewOnly ? 'View Image' : 'Edit Image'),
                 actions: [
                   if (!_viewOnly)
-                    IconButton(
-                      icon: const Icon(Icons.save),
-                      tooltip: 'Save image',
-                      onPressed: () async {
-                        await _saveImage(context, controller);
-                        if (mounted) {
-                          Navigator.pop(context);
-                        }
-                      },
+                    Padding(
+                      // Avoid the "Debug" banner
+                      padding: const EdgeInsets.only(right: 20.0),
+                      child: IconButton(
+                        icon: const Icon(Icons.save),
+                        tooltip: 'Save image',
+                        onPressed: () async {
+                          await _saveImage(context, controller);
+                          if (mounted) {
+                            Navigator.pop(context);
+                          }
+                        },
+                      ),
                     ),
                 ],
               ),
@@ -274,10 +277,10 @@ class _ExampleState extends State<_Example> {
     final encodedBytes = await _getEncodedBytes(controller);
     if (kIsWeb) {
       final path = await FileSaver.instance.saveFile(
-        'Test-image-out.jpg',
-        Uint8List.fromList(encodedBytes),
-        '',
-        mimeType: MimeType.JPEG,
+        name: 'Test-image-out.jpg',
+        bytes: Uint8List.fromList(encodedBytes),
+        ext: '',
+        mimeType: MimeType.jpeg,
       );
       debugPrint('Downloaded $path');
     } else {

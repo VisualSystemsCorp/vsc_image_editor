@@ -114,6 +114,9 @@ class VscImageEditorState extends State<VscImageEditor> {
                         constraints.maxWidth, constraints.maxHeight);
                     return Observer(
                       builder: (context) {
+                        // Make sure this is observed so we rebuild when the overlays change.
+                        _model.viewportOverlays.length;
+
                         return Stack(
                           children: [
                             Zoom(
@@ -130,7 +133,9 @@ class VscImageEditorState extends State<VscImageEditor> {
                               ),
                             ),
                             Positioned.fill(
-                              child: Stack(children: _model.viewportOverlays),
+                              child: Stack(
+                                children: _model.viewportOverlays,
+                              ),
                             ),
                           ],
                         );

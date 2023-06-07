@@ -134,9 +134,14 @@ abstract class EditorModelBase with Store {
 
   Tool? _selectedToolPendingViewport;
 
+  final viewportOverlays = ObservableList<Widget>();
+
+  /// A counter that can be observed to trigger a redraw of the viewport overlays.
+  /// This can be used if the [viewportOverlays] list hasn't changed, but an overlay
+  /// needs to be redrawn.
   @readonly
   // ignore: prefer_final_fields
-  var _viewportOverlays = ObservableList<Widget>();
+  var _viewportOverlaysCounter = 0;
 
   @readonly
   double _zoomScale = 1;
@@ -176,7 +181,7 @@ abstract class EditorModelBase with Store {
       _viewportTransformationMatrix = viewportTransformationController.value;
       // _debugZoomControllerMatrix();
       if (_selectedTool == Tool.crop) {
-        // debugPrint('Recentering....');
+        // debugPrint('Re-centering....');
         _centerCropRect();
       }
     });
@@ -259,7 +264,7 @@ abstract class EditorModelBase with Store {
       cancelCrop(selectDefaultTool: false);
     }
 
-    _viewportOverlays.clear();
+    viewportOverlays.clear();
     switch (_selectedTool) {
       case Tool.select:
         break;
@@ -370,7 +375,7 @@ abstract class EditorModelBase with Store {
 
     _centerCropRect();
 
-    _viewportOverlays
+    viewportOverlays
       ..clear()
       ..add(_CropControl(model: this as EditorModel));
   }
@@ -604,7 +609,7 @@ abstract class EditorModelBase with Store {
   @action
   void startFreeDrawing() {
     _workingAnnotationObjects.clear();
-    _viewportOverlays
+    viewportOverlays
       ..clear()
       ..add(_FreeDrawControl(model: this as EditorModel));
   }
@@ -665,7 +670,7 @@ abstract class EditorModelBase with Store {
   @action
   void startDrawingOval() {
     _workingAnnotationObjects.clear();
-    _viewportOverlays
+    viewportOverlays
       ..clear()
       ..add(_OvalDrawControl(model: this as EditorModel));
   }
@@ -673,7 +678,7 @@ abstract class EditorModelBase with Store {
   @action
   void startDrawingRect() {
     _workingAnnotationObjects.clear();
-    _viewportOverlays
+    viewportOverlays
       ..clear()
       ..add(_RectDrawControl(model: this as EditorModel));
   }
@@ -681,7 +686,7 @@ abstract class EditorModelBase with Store {
   @action
   void startDrawingLine() {
     _workingAnnotationObjects.clear();
-    _viewportOverlays
+    viewportOverlays
       ..clear()
       ..add(_LineDrawControl(model: this as EditorModel));
   }
@@ -689,7 +694,7 @@ abstract class EditorModelBase with Store {
   @action
   void startDrawingArrow() {
     _workingAnnotationObjects.clear();
-    _viewportOverlays
+    viewportOverlays
       ..clear()
       ..add(_LineDrawControl(model: this as EditorModel, isArrow: true));
   }
@@ -697,7 +702,7 @@ abstract class EditorModelBase with Store {
   @action
   void startDrawingText() {
     _workingAnnotationObjects.clear();
-    _viewportOverlays
+    viewportOverlays
       ..clear()
       ..add(_TextDrawControl(model: this as EditorModel));
   }
@@ -739,7 +744,7 @@ abstract class EditorModelBase with Store {
   @action
   void maybeSelectAnnotationAt(Offset viewportPoint) {
     _selectedAnnotationObject = null;
-    _viewportOverlays.clear();
+    viewportOverlays.clear();
     final physicalPt =
         _transformViewportPointToPhysicalImagePoint(viewportPoint);
     for (final annotation in _annotationObjects.reversed) {
@@ -764,7 +769,11 @@ abstract class EditorModelBase with Store {
     }
 
     if (_selectedAnnotationObject != null) {
-      _viewportOverlays.add(_selectedObjectControl);
+      debugPrint(
+          'Selected annotation: ${_selectedAnnotationObject?.getBounds()}');
+      viewportOverlays.add(_selectedObjectControl);
+    } else {
+      debugPrint('No annotation found');
     }
   }
 
@@ -784,8 +793,9 @@ abstract class EditorModelBase with Store {
     //     'phyDelta=$phyDelta phyCurrTopLeft=$phyCurrTopLeft vpCurrTopLeft=$vpCurrTopLeft');
     selectedObject
         .transform(Matrix4.translationValues(phyDelta.dx, phyDelta.dy, 0.0));
-    // Cause the selector to update
-    _selectedAnnotationObject = selectedObject;
+
+    // Cause the selector to be redrawn
+    ++_viewportOverlaysCounter;
     updateImage();
   }
 
@@ -892,6 +902,8 @@ class _SelectedObjectControl extends StatelessWidget {
     return Observer(
       builder: (context) {
         if (model.selectedAnnotationObject != null) {
+          model.viewportOverlaysCounter; // observe
+
           final bounds = model.selectedAnnotationObject!.getBounds();
           final vpBounds =
               model._transformPhysicalImageRectToViewportRect(bounds);
