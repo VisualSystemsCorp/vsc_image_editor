@@ -769,11 +769,11 @@ abstract class EditorModelBase with Store {
     }
 
     if (_selectedAnnotationObject != null) {
-      debugPrint(
-          'Selected annotation: ${_selectedAnnotationObject?.getBounds()}');
+      // debugPrint(
+      //     'Selected annotation: ${_selectedAnnotationObject?.getBounds()}');
       viewportOverlays.add(_selectedObjectControl);
     } else {
-      debugPrint('No annotation found');
+      // debugPrint('No annotation found');
     }
   }
 
