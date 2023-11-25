@@ -600,7 +600,7 @@ abstract class EditorModelBase with Store {
     final canvas = Canvas(recorder);
     _imagePainter.paint(canvas, Size.zero);
     final picture = recorder.endRecording();
-    final image = picture.toImage(physicalRotatedCropRect.width.floor(),
+    final image = await picture.toImage(physicalRotatedCropRect.width.floor(),
         physicalRotatedCropRect.height.floor());
     picture.dispose();
     return image;
