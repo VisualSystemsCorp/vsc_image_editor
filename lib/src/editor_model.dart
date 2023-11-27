@@ -1374,7 +1374,7 @@ class _ImagePainter extends _ViewportPainter {
     canvas.drawImage(
       _model.uiImage!,
       Offset.zero,
-      Paint()..filterQuality = FilterQuality.medium,
+      Paint(),
     );
 
     for (final annotation in _model._annotationObjects) {
