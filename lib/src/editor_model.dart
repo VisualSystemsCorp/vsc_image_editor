@@ -942,6 +942,7 @@ class _SelectedObjectControl extends StatelessWidget {
                           child: const Icon(
                             Icons.clear,
                             size: 24,
+                            color: Colors.black54,
                           ),
                         ),
                       ),

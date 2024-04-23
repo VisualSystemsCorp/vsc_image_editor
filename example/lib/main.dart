@@ -26,6 +26,7 @@ class MyApp extends StatelessWidget {
       title: 'VscImageEditor Example',
       theme: ThemeData(
         primarySwatch: Colors.blue,
+        brightness: Brightness.light,
       ),
       home: const _Example(),
     );
