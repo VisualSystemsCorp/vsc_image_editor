@@ -247,8 +247,8 @@ class VscImageEditorState extends State<VscImageEditor> {
               .toList(growable: false),
           tooltip: 'Brush size',
           offset: const Offset(96, 0),
-          child: Row(
-            children: const [
+          child: const Row(
+            children: [
               Icon(Icons.brush),
               Icon(Icons.arrow_drop_up),
             ],
@@ -306,8 +306,8 @@ class VscImageEditorState extends State<VscImageEditor> {
               .toList(growable: false),
           tooltip: 'Font size',
           offset: const Offset(96, 0),
-          child: Row(
-            children: const [
+          child: const Row(
+            children: [
               Icon(Icons.format_size),
               Icon(Icons.arrow_drop_up),
             ],

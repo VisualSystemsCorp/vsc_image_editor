@@ -1372,6 +1372,12 @@ class _ImagePainter extends _ViewportPainter {
 
   @override
   void paintTransformed(Canvas canvas, Size size) {
+    // Draw black background to show PNG transparency on black background.
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = Colors.black,
+    );
+
     canvas.drawImage(
       _model.uiImage!,
       Offset.zero,
